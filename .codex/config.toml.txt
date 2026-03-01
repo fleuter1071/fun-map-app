@@ -1,0 +1,2 @@
+[agents.visual_design]
+description = "Visual design specialist for web apps. Use the $designer skill first for UI/UX reviews and redesign work. Focus on hierarchy, layout, spacing, readability, interaction polish, and cohesive design systems. Return prioritized recommendations and quick wins.

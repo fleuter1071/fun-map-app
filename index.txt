@@ -1,0 +1,1530 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>US City Hourly Time-Lapse Map</title>
+  <style>
+    :root {
+      --bg: #0b0c10;
+      --panel: #12141a;
+      --text: #e8eaf0;
+      --muted: #a7adbb;
+      --stroke: rgba(255,255,255,0.12);
+      --accent: #7dd3fc;
+      --panelAlpha: rgba(18,20,26,0.92);
+
+      /* Map styling */
+      --mapWater: #0b1220;
+      --mapLand: #0f172a;
+      --mapStateStroke: rgba(255,255,255,0.10);
+      --mapCoastStroke: rgba(125,211,252,0.40);
+      --water: var(--mapWater);
+      --land: var(--mapLand);
+      --border: var(--mapStateStroke);
+      --coast: var(--mapCoastStroke);
+
+      /* Label readability */
+      --labelBg: rgba(0,0,0,0.68);
+      --labelBorder: rgba(255,255,255,0.18);
+      --labelTextStroke: rgba(0,0,0,0.90);
+      --labelStrokeWidth: 3.5px;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #ffffff;
+        --panel: #f6f7fb;
+        --text: #0f172a;
+        --muted: #475569;
+        --stroke: rgba(15,23,42,0.15);
+        --accent: #0284c7;
+        --panelAlpha: rgba(246,247,251,0.92);
+
+        /* Map styling */
+        --mapWater: #eef7ff;
+        --mapLand: #fbf7f0;
+        --mapStateStroke: rgba(15,23,42,0.18);
+        --mapCoastStroke: rgba(2,132,199,0.35);
+        --water: var(--mapWater);
+        --land: var(--mapLand);
+        --border: var(--mapStateStroke);
+        --coast: var(--mapCoastStroke);
+
+        /* Label readability */
+        --labelBg: rgba(255,255,255,0.90);
+        --labelBorder: rgba(15,23,42,0.20);
+        --labelTextStroke: rgba(255,255,255,0.95);
+        --labelStrokeWidth: 4px;
+      }
+    }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--stroke);
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+    }
+    header .title {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    header h1 {
+      font-size: 16px;
+      margin: 0;
+      letter-spacing: 0.2px;
+    }
+    header .sub {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    header .actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    button {
+      background: transparent;
+      border: 1px solid var(--stroke);
+      color: var(--text);
+      padding: 8px 10px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    button:hover { border-color: rgba(125,211,252,0.55); }
+    #wrap {
+      display: grid;
+      grid-template-columns: 1fr;
+    }
+    #mapWrap {
+      position: relative;
+      padding: 10px 10px 16px;
+    }
+    #map {
+      width: 100%;
+      height: min(76vh, 740px);
+      display: block;
+      background: var(--mapWater);
+      border: 1px solid var(--stroke);
+      border-radius: 14px;
+    }
+    .state {
+      fill: var(--mapLand);
+      stroke: var(--mapStateStroke);
+      stroke-width: 1;
+      vector-effect: non-scaling-stroke;
+    }
+    .nation-outline {
+      fill: none;
+      stroke: var(--mapCoastStroke);
+      stroke-width: 1.2;
+      vector-effect: non-scaling-stroke;
+    }
+    .city-dot {
+      fill: rgba(148,163,184,0.35);
+      stroke: rgba(255,255,255,0.95);
+      stroke-width: 1.5;
+      paint-order: stroke fill;
+      vector-effect: non-scaling-stroke;
+      opacity: 0.95;
+    }
+    .hit-area { cursor: pointer; }
+
+    /* Focus highlight (used by permalinks) */
+    g.city.focused circle.city-dot {
+      stroke: var(--accent);
+      stroke-width: 2.6;
+      opacity: 1;
+    }
+
+    .label-bg {
+      fill: var(--labelBg);
+      stroke: var(--labelBorder);
+      stroke-width: 0.8;
+      rx: 4;
+      ry: 4;
+      pointer-events: none;
+    }
+    .city-label {
+      font-size: 12px;
+      font-weight: 700;
+      paint-order: stroke;
+      stroke: var(--labelTextStroke);
+      stroke-width: var(--labelStrokeWidth);
+      stroke-linejoin: round;
+      fill: var(--text);
+      pointer-events: none;
+      user-select: none;
+      filter: drop-shadow(0 1px 1px rgba(0,0,0,0.25));
+    }
+    .city-label .wx {
+      fill: var(--muted);
+      font-weight: 700;
+    }
+    #tooltip {
+      position: absolute;
+      pointer-events: none;
+      transform: translate(-50%, calc(-100% - 10px));
+      background: rgba(0,0,0,0.78);
+      color: white;
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 10px;
+      padding: 8px 10px;
+      font-size: 12px;
+      line-height: 1.25;
+      min-width: 200px;
+      display: none;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+      z-index: 10;
+    }
+    #tooltip .muted { color: rgba(255,255,255,0.7); font-size: 11px; }
+
+    .divider { height: 1px; background: rgba(255,255,255,0.16); margin: 7px 0; }
+    .secTitle { font-size: 11px; font-weight: 800; letter-spacing: .2px; display:flex; align-items:center; gap:6px; }
+    .infoIcon { font-size: 11px; color: rgba(255,255,255,0.75); cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.35); line-height: 1; }
+    .nowMain { font-size: 12px; }
+    .chipRow { display:flex; flex-wrap:wrap; gap: 6px; margin-top: 6px; }
+    .chip { font-size: 10px; color: rgba(255,255,255,0.78); border: 1px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.06); padding: 3px 7px; border-radius: 999px; white-space: nowrap; }
+    .chip.badge { font-weight: 800; }
+
+    .hover-ring {
+      pointer-events: none;
+      stroke: var(--accent);
+      stroke-width: 2.2;
+      opacity: 0;
+    }
+
+    .sparkWrap { margin-top: 8px; }
+    .sparkHead { display:flex; align-items:baseline; justify-content:space-between; gap:10px; }
+    .sparkTitle { font-size: 11px; font-weight: 900; letter-spacing: .2px; }
+    .sparkMinMax { font-size: 10px; color: rgba(255,255,255,0.72); white-space: nowrap; }
+    .sparkBox {
+      margin-top: 5px;
+      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(255,255,255,0.05);
+      border-radius: 12px;
+      padding: 5px 6px;
+    }
+    .sparkBox svg { display:block; width: 230px; height: 46px; }
+    .sparkLine { stroke: var(--accent); stroke-width: 2; fill: none; }
+    .sparkArea { fill: var(--accent); opacity: 0.12; }
+    .sparkEnd { fill: var(--accent); }
+    .statGrid { display:grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; }
+    .statTile { border: 1px solid rgba(255,255,255,0.14); background: rgba(255,255,255,0.05); border-radius: 12px; padding: 7px 8px; }
+    .statLabel { font-size: 10px; color: rgba(255,255,255,0.70); }
+    .statValue { font-size: 13px; font-weight: 900; margin-top: 2px; }
+    .statValue.mutedVal { color: rgba(255,255,255,0.70); font-weight: 800; }
+    
+    .pinProfileTitle{ margin-top: 8px; font-size: 11px; color: var(--muted); display:flex; align-items:center; gap:6px; }
+    .pinStatGrid{ display:grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; }
+    .pinStatTile{ border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.03); border-radius: 10px; padding: 6px 7px; }
+    .pinStatLabel{ font-size: 10px; color: var(--muted); }
+    .pinStatValue{ font-size: 12px; font-weight: 900; margin-top: 2px; color: var(--text); }
+
+    #status {
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--muted);
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    #status .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      display: inline-block;
+      opacity: 0.85;
+    }
+
+    .progressTrack{
+      width: 180px;
+      height: 8px;
+      border-radius: 999px;
+      border: 1px solid var(--stroke);
+      background: rgba(255,255,255,0.04);
+      overflow: hidden;
+      display: none;
+    }
+    .progressFill{
+      height: 100%;
+      width: 0%;
+      border-radius: 999px;
+      background: rgba(125,211,252,0.85);
+      transition: width 180ms ease;
+    }
+
+    a { color: var(--accent); }
+  
+    #legend {
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    #legend .bar {
+      width: min(320px, 70vw);
+      height: 12px;
+      border-radius: 999px;
+      border: 1px solid var(--stroke);
+      background: linear-gradient(to right, #3b82f6, #f59e0b);
+    }
+    #legend .minmax {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      white-space: nowrap;
+    }
+    #legend .tag {
+      color: var(--text);
+      font-weight: 600;
+      font-size: 11px;
+      border: 1px solid var(--stroke);
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.03);
+    }
+
+    /* Day slider control */
+    .dayControl{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:6px 10px;
+      border: 1px solid var(--stroke);
+      border-radius: 10px;
+      background: rgba(255,255,255,0.03);
+    }
+    .dayLabel{
+      font-size:12px;
+      font-weight:700;
+      color: var(--text);
+      min-width: 90px;
+      text-align:center;
+    }
+    #daySlider{
+      width: 160px;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+    #playBtn:hover {
+      background: rgba(255,255,255,0.2) !important;
+    }
+
+    /* Color mode + surface control */
+    .modeControl{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:6px 10px;
+      border: 1px solid var(--stroke);
+      border-radius: 999px;
+      background: rgba(255,255,255,0.03);
+    }
+    .modeControl .pill{
+      font-size:12px;
+      font-weight:800;
+      color: var(--text);
+      opacity: 0.9;
+    }
+    .modeControl select{
+      font: inherit;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text);
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--stroke);
+      border-radius: 10px;
+      padding: 4px 8px;
+      outline: none;
+      cursor: pointer;
+    }
+    .modeControl select:focus{ box-shadow: 0 0 0 3px rgba(14,165,233,0.22); }
+    .toggle{
+      display:flex;
+      align-items:center;
+      gap:6px;
+      font-size:12px;
+      font-weight:700;
+      color: var(--text);
+      opacity: 0.95;
+      user-select: none;
+      cursor: pointer;
+    }
+    .toggle input{ width: 14px; height: 14px; accent-color: var(--accent); cursor: pointer; }
+
+    /* Voronoi surface */
+    .surface{ pointer-events: none; }
+    .surface .cell{
+      opacity: 0.22;
+      stroke: rgba(0,0,0,0.10);
+      stroke-width: 0.6;
+      mix-blend-mode: multiply;
+    }
+    .surface .contour{
+      stroke: rgba(255,255,255,0.10);
+      stroke-width: 0.6;
+      vector-effect: non-scaling-stroke;
+      opacity: 0.38;
+    }
+    .borders .state-borders{
+      fill:none;
+      stroke: var(--border);
+      stroke-width: 0.9;
+      opacity: 0.85;
+    }
+    .borders .nation-outline{
+      fill:none;
+      stroke: var(--coast);
+      stroke-width: 1.3;
+      opacity: 0.9;
+    }
+    .land .state-fill{
+      fill: var(--land);
+      stroke: none;
+    }
+
+    #tooltip .sel{ color: #fff; font-weight: 800; }
+    #pinnedPanel .sel{ color: var(--text); font-weight: 800; }
+
+    #pinnedPanel{
+      position:absolute;
+      top: 14px;
+      right: 14px;
+      width: 300px;
+      max-width: min(320px, calc(100vw - 40px));
+      max-height: calc(76vh - 80px);
+      overflow:auto;
+      background: var(--panelAlpha);
+      border: 1px solid var(--stroke);
+      border-radius: 14px;
+      box-shadow: 0 14px 40px rgba(0,0,0,0.25);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      padding: 10px 10px 8px;
+      z-index: 5;
+    }
+    #pinnedPanel .panelHead{
+      display:flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    #pinnedPanel .panelTitle{ font-weight: 800; font-size: 12px; color: var(--text); }
+    #pinnedPanel .panelHint{ font-size: 11px; color: var(--muted); }
+
+    .pinRow{
+      display:flex;
+      gap:10px;
+      align-items:flex-start;
+      justify-content: space-between;
+      padding: 8px 8px;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      background: rgba(255,255,255,0.03);
+      margin-bottom: 8px;
+    }
+    .pinRow:last-child{ margin-bottom: 0; }
+    .pinMain{ min-width: 0; }
+    .pinCity{ font-size: 12px; }
+    .pinMeta{ font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .pinStrip{ font-size: 11px; color: var(--muted); margin-top: 6px; line-height: 1.3; }
+    .pinStrip .sel{ color: var(--text); font-weight: 800; }
+    .pinRemove{
+      padding: 6px 8px;
+      border-radius: 10px;
+      font-size: 12px;
+      line-height: 1;
+      border: 1px solid var(--stroke);
+      background: transparent;
+      color: var(--text);
+      cursor: pointer;
+      flex: 0 0 auto;
+    }
+    .pinRemove:hover{ border-color: rgba(125,211,252,0.55); }
+
+    g.city.pinned circle.city-dot{
+      stroke: rgba(255,255,255,0.9);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="title">
+      <h1>US Weather Map — Top 50 Cities (Animated Hourly Time-Lapse)</h1>
+      <div class="sub">Single-file HTML. Fetches free forecasts from Open-Meteo; map from us-atlas + D3.</div>
+    </div>
+    <div class="actions">
+      <button id="refreshBtn" title="Re-fetch weather">Refresh weather</button>
+      
+      <div class="dayControl" title="Scrub through the next 72 hours">
+        <button id="playBtn" style="border: none; background: rgba(255,255,255,0.1); border-radius: 50%; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0;">▶️</button>
+        <span class="dayLabel" id="dayLabel">Now</span>
+        <input id="daySlider" type="range" min="0" max="71" step="1" value="0" aria-label="Select hour" />
+      </div>
+
+      <div class="modeControl" title="Choose what the map colors represent (dots + surface)">
+        <span class="pill">Color</span>
+        <select id="colorModeSelect" aria-label="Color mode">
+          <option value="temp" selected>Temp (Hourly)</option>
+          <option value="precip">Precip (%) (Hourly)</option>
+        </select>
+        <label class="toggle" title="Show a soft surface between cities">
+          <input type="checkbox" id="surfaceToggle" checked />
+          <span>Surface</span>
+        </label>
+      </div>
+      <button id="zoomInBtn" title="Zoom in">Zoom +</button>
+      <button id="zoomOutBtn" title="Zoom out">Zoom –</button>
+      <button id="resetBtn" title="Reset zoom/pan">Reset view</button>
+      <button id="copyLinkBtn" title="Copy a shareable link that restores this exact view">Copy link</button>
+    </div>
+  </header>
+
+  <div id="wrap">
+    <div id="mapWrap">
+      <svg id="map" role="img" aria-label="Map of the United States with city forecasts"></svg>
+      <div id="tooltip"></div>
+      <div id="pinnedPanel" aria-label="Pinned cities" style="display:none;">
+        <div class="panelHead">
+          <span class="panelTitle">Pinned cities</span>
+          <span class="panelHint">Click dots to pin</span>
+        </div>
+        <div id="pinnedList"></div>
+      </div>
+      <div id="status">
+        <span class="dot"></span>
+        <span id="statusText">Loading map…</span>
+        <div class="progressTrack" id="progressTrack" aria-hidden="true">
+          <div class="progressFill" id="progressFill"></div>
+        </div>
+      </div>
+      <div id="legend" style="display:none;">
+        <span class="tag" id="legendTag">Now</span>
+        <div class="minmax">
+          <span id="legendMin"></span>
+          <div class="bar" id="legendBar"></div>
+          <span id="legendMax"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  const statusEl = document.getElementById('statusText');
+  const progressTrackEl = document.getElementById('progressTrack');
+  const progressFillEl = document.getElementById('progressFill');
+
+  const LOADING_COLOR = "rgba(148,163,184,0.35)";
+  const ERROR_COLOR = "rgba(100,116,139,0.85)";
+
+  function setProgress(done, total, failed = 0){
+    if(!progressTrackEl || !progressFillEl) return;
+    const pct = total ? Math.max(0, Math.min(1, done / total)) : 0;
+    progressTrackEl.style.display = "inline-flex";
+    progressFillEl.style.width = `${(pct * 100).toFixed(1)}%`;
+    if(done >= total){
+      progressTrackEl.style.opacity = "0.65";
+    } else {
+      progressTrackEl.style.opacity = "1";
+    }
+  }
+
+  function setStatus(msg){ if(statusEl) statusEl.textContent = msg; }
+
+  function loadScript(url){
+    return new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = url;
+      s.async = true;
+      s.onload = () => resolve(url);
+      s.onerror = () => reject(new Error('Failed to load ' + url));
+      document.head.appendChild(s);
+    });
+  }
+
+  async function loadWithFallback(urls, name){
+    let lastErr;
+    for(const u of urls){
+      try { await loadScript(u); return u; }
+      catch(e){ lastErr = e; }
+    }
+    throw new Error(`Could not load ${name}. Last error: ${lastErr && lastErr.message}`);
+  }
+
+  async function start(){
+    try {
+      setStatus('Loading libraries…');
+      await loadWithFallback([
+        'https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js',
+        'https://unpkg.com/d3@7/dist/d3.min.js',
+        'https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js'
+      ], 'd3');
+      await loadWithFallback([
+        'https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js',
+        'https://unpkg.com/topojson-client@3/dist/topojson-client.min.js',
+        'https://cdnjs.cloudflare.com/ajax/libs/topojson-client/3.1.0/topojson-client.min.js'
+      ], 'topojson-client');
+
+      if(!window.d3 || !window.topojson){
+        throw new Error('Libraries loaded but not available on window (d3/topojson).');
+      }
+      startApp();
+
+    } catch (e) {
+      console.error(e);
+      setStatus('Failed to load required libraries. Your network may be blocking CDNs. Open DevTools → Console for details.');
+    }
+  }
+  </script>
+
+  <script>
+  function startApp(){
+
+  async function fetchJsonWithTimeout(url, timeoutMs=12000){
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, {signal: controller.signal, headers: {'Accept':'application/json'}});
+      if(!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
+      return await res.json();
+    } finally {
+      clearTimeout(t);
+    }
+  }
+
+  async function loadUSAtlasStates(){
+    const urls = [
+      'https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json',
+      'https://unpkg.com/us-atlas@3/states-10m.json',
+      'https://cdnjs.cloudflare.com/ajax/libs/us-atlas/3.0.1/states-10m.json'
+    ];
+    let lastErr;
+    for(const u of urls){
+      try { return await fetchJsonWithTimeout(u); }
+      catch(e){ lastErr = e; }
+    }
+    throw new Error('Failed to load map JSON from all sources: ' + (lastErr && lastErr.message));
+  }
+
+  const CITIES = [{"city":"New York","state":"NY","lat":40.6943,"lon":-73.9249,"pop":8537673},{"city":"Los Angeles","state":"CA","lat":34.114,"lon":-118.4068,"pop":3976322},{"city":"Chicago","state":"IL","lat":41.8373,"lon":-87.6861,"pop":2704958},{"city":"Houston","state":"TX","lat":29.7871,"lon":-95.3936,"pop":2303482},{"city":"Phoenix","state":"AZ","lat":33.5722,"lon":-112.0891,"pop":1615017},{"city":"Philadelphia","state":"PA","lat":40.0076,"lon":-75.134,"pop":1567872},{"city":"San Antonio","state":"TX","lat":29.4722,"lon":-98.5247,"pop":1492510},{"city":"San Diego","state":"CA","lat":32.8312,"lon":-117.1225,"pop":1406630},{"city":"Dallas","state":"TX","lat":32.7938,"lon":-96.7659,"pop":1317929},{"city":"San Jose","state":"CA","lat":37.302,"lon":-121.8488,"pop":1025350},{"city":"Austin","state":"TX","lat":30.3038,"lon":-97.7545,"pop":947890},{"city":"Jacksonville","state":"FL","lat":30.3322,"lon":-81.6749,"pop":880619},{"city":"San Francisco","state":"CA","lat":37.7561,"lon":-122.4429,"pop":870887},{"city":"Columbus","state":"OH","lat":39.9859,"lon":-82.9852,"pop":860090},{"city":"Indianapolis","state":"IN","lat":39.7771,"lon":-86.1458,"pop":855164},{"city":"Fort Worth","state":"TX","lat":32.7813,"lon":-97.3466,"pop":854113},{"city":"Charlotte","state":"NC","lat":35.208,"lon":-80.8308,"pop":842051},{"city":"Seattle","state":"WA","lat":47.6217,"lon":-122.3238,"pop":704352},{"city":"Denver","state":"CO","lat":39.7621,"lon":-104.8759,"pop":693060},{"city":"El Paso","state":"TX","lat":31.8478,"lon":-106.431,"pop":683080},{"city":"Washington","state":"DC","lat":38.9047,"lon":-77.0163,"pop":681170},{"city":"Boston","state":"MA","lat":42.3189,"lon":-71.0838,"pop":673184},{"city":"Detroit","state":"MI","lat":42.3834,"lon":-83.1024,"pop":672795},{"city":"Nashville","state":"TN","lat":36.1714,"lon":-86.7844,"pop":660388},{"city":"Memphis","state":"TN","lat":35.1047,"lon":-89.9773,"pop":652717},{"city":"Portland","state":"OR","lat":45.5372,"lon":-122.65,"pop":639863},{"city":"Oklahoma City","state":"OK","lat":35.4677,"lon":-97.5138,"pop":638367},{"city":"Las Vegas","state":"NV","lat":36.2288,"lon":-115.2603,"pop":632912},{"city":"Louisville","state":"KY","lat":38.1662,"lon":-85.6488,"pop":616261},{"city":"Baltimore","state":"MD","lat":39.3051,"lon":-76.6144,"pop":614664},{"city":"Milwaukee","state":"WI","lat":43.064,"lon":-87.9669,"pop":595047},{"city":"Albuquerque","state":"NM","lat":35.1055,"lon":-106.6476,"pop":559277},{"city":"Tucson","state":"AZ","lat":32.1558,"lon":-110.8777,"pop":530706},{"city":"Fresno","state":"CA","lat":36.7834,"lon":-119.7933,"pop":522053},{"city":"Sacramento","state":"CA","lat":38.5666,"lon":-121.4683,"pop":495234},{"city":"Mesa","state":"AZ","lat":33.4016,"lon":-111.718,"pop":484587},{"city":"Kansas City","state":"MO","lat":39.1239,"lon":-94.5541,"pop":481420},{"city":"Atlanta","state":"GA","lat":33.7627,"lon":-84.4231,"pop":472522},{"city":"Long Beach","state":"CA","lat":33.8059,"lon":-118.161,"pop":470130},{"city":"Colorado Springs","state":"CO","lat":38.8673,"lon":-104.7605,"pop":465101},{"city":"Raleigh","state":"NC","lat":35.8323,"lon":-78.6441,"pop":458880},{"city":"Miami","state":"FL","lat":25.784,"lon":-80.2102,"pop":453579},{"city":"Virginia Beach","state":"VA","lat":36.7335,"lon":-76.0435,"pop":452602},{"city":"Omaha","state":"NE","lat":41.2634,"lon":-96.0453,"pop":446970},{"city":"Oakland","state":"CA","lat":37.7903,"lon":-122.2165,"pop":420005},{"city":"Minneapolis","state":"MN","lat":44.9635,"lon":-93.2679,"pop":413651},{"city":"Tulsa","state":"OK","lat":36.1284,"lon":-95.9037,"pop":403090},{"city":"Arlington","state":"TX","lat":32.6998,"lon":-97.1251,"pop":392772},{"city":"New Orleans","state":"LA","lat":30.0687,"lon":-89.9288,"pop":391495},{"city":"Wichita","state":"KS","lat":37.6894,"lon":-97.344,"pop":389902}];
+
+  const WEATHER_FRESH_MS = 60 * 60 * 1000;
+  const WEATHER_STALE_MS = 24 * 60 * 60 * 1000;
+  const WEATHER_FETCH_TIMEOUT_MS = 4000;
+  const CONCURRENCY = 8;
+  const CACHE_VERSION = 5;
+
+  const tooltipEl = document.getElementById('tooltip');
+
+  let _hoverCityKey = null;
+  let _lastTooltipPt = null;
+
+  function setHoverState(city, event){
+    _hoverCityKey = city ? cityKey(city) : null;
+    if(event && event.clientX != null && event.clientY != null){
+      _lastTooltipPt = {clientX: event.clientX, clientY: event.clientY};
+    }
+  }
+
+  function clearHoverState(){
+    _hoverCityKey = null;
+    _lastTooltipPt = null;
+  }
+
+  function refreshTooltipIfHovering(city){
+    if(!city) return;
+    if(!_hoverCityKey || _hoverCityKey !== cityKey(city)) return;
+    if(!tooltipEl || tooltipEl.style.display !== "block") return;
+    if(!_lastTooltipPt) return;
+    showTooltip(_lastTooltipPt, city);
+  }
+
+  const refreshBtn = document.getElementById('refreshBtn');
+  const zoomInBtn = document.getElementById('zoomInBtn');
+  const zoomOutBtn = document.getElementById('zoomOutBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const copyLinkBtn = document.getElementById('copyLinkBtn');
+  const playBtn = document.getElementById('playBtn');
+
+  const daySlider = document.getElementById('daySlider');
+  const dayLabelEl = document.getElementById('dayLabel');
+  const colorModeSelect = document.getElementById("colorModeSelect");
+  const surfaceToggle = document.getElementById("surfaceToggle");
+
+  let colorMode = "temp";
+  let surfaceEnabled = true;
+
+  if(colorModeSelect){
+    colorModeSelect.addEventListener("change", () => {
+      colorMode = colorModeSelect.value || "temp";
+      computeScaleFromLoaded(true);
+      schedulePermalinkUpdate();
+    });
+  }
+  if(surfaceToggle){
+    surfaceToggle.addEventListener("change", () => {
+      surfaceEnabled = !!surfaceToggle.checked;
+      gSurface.style("display", surfaceEnabled ? null : "none");
+      computeScaleFromLoaded(false);
+      schedulePermalinkUpdate();
+    });
+  }
+
+  const PERMALINK_VERSION = 2;
+  let permalinkReady = false;
+  let suppressPermalink = true;
+  let pendingZoomState = null;
+  let focusedKey = null;
+  let pendingFocusKey = null;
+
+  function _clamp(n, lo, hi){ n = +n; return isFinite(n) ? Math.max(lo, Math.min(hi, n)) : lo; }
+  function _clampInt(n, lo, hi, def){ n = parseInt(n, 10); return isFinite(n) ? Math.max(lo, Math.min(hi, n)) : def; }
+  function _b64urlEncode(str){
+    const b64 = btoa(unescape(encodeURIComponent(str)));
+    return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  }
+  function _b64urlDecode(b64url){
+    const b64 = (b64url || "").replace(/-/g, "+").replace(/_/g, "/");
+    const pad = b64.length % 4 ? "=".repeat(4 - (b64.length % 4)) : "";
+    return decodeURIComponent(escape(atob(b64 + pad)));
+  }
+
+  function encodePermalinkState(obj){ return _b64urlEncode(JSON.stringify(obj)); }
+  function decodePermalinkState(str){ try{ return JSON.parse(_b64urlDecode(str)); }catch(e){ return null; } }
+
+  function readPermalinkFromURL(){
+    const rawHash = (location.hash || "").replace(/^#/, "");
+    if(!rawHash) return null;
+    let encoded = null;
+    if(rawHash.includes("=")){
+      const params = new URLSearchParams(rawHash);
+      encoded = params.get("s") || params.get("state");
+    } else {
+      encoded = rawHash;
+    }
+    if(!encoded) return null;
+    return normalizePermalinkState(decodePermalinkState(encoded));
+  }
+
+  function normalizePermalinkState(raw){
+    if(!raw || typeof raw !== "object") return null;
+    const out = { v: PERMALINK_VERSION };
+    out.hour = _clampInt(raw.hour || raw.day, 0, 71, 0); // backwards compat
+    out.mode = (raw.mode === "precip") ? "precip" : "temp";
+    out.surface = raw.surface ? 1 : 0;
+    if(Array.isArray(raw.pins)){
+      out.pins = raw.pins.filter(k => typeof k === "string" && k.length < 80).slice(0, 50);
+    } else { out.pins = null; }
+    if(raw.z && typeof raw.z === "object"){
+      out.z = { k: _clamp(raw.z.k, 1, 8), x: _clamp(raw.z.x, -5000, 5000), y: _clamp(raw.z.y, -5000, 5000) };
+    } else { out.z = null; }
+    out.focus = (typeof raw.focus === "string" && raw.focus.length < 80) ? raw.focus : null;
+    return out;
+  }
+
+  function getPermalinkState(){
+    const pins = Array.from(pinned.keys());
+    const z = lastZoomTransform || d3.zoomIdentity;
+    return {
+      v: PERMALINK_VERSION,
+      hour: selectedHourIndex,
+      mode: colorMode,
+      surface: surfaceEnabled ? 1 : 0,
+      pins,
+      z: { k: z.k, x: z.x, y: z.y },
+      focus: focusedKey || null
+    };
+  }
+
+  let _permalinkTimer = null;
+  function schedulePermalinkUpdate(){
+    if(!permalinkReady || suppressPermalink) return;
+    clearTimeout(_permalinkTimer);
+    _permalinkTimer = setTimeout(updatePermalinkNow, 160);
+  }
+
+  function updatePermalinkNow(){
+    if(!permalinkReady || suppressPermalink) return;
+    const encoded = encodePermalinkState(getPermalinkState());
+    const url = new URL(location.href);
+    url.hash = `s=${encoded}`;
+    history.replaceState(null, "", url.toString());
+  }
+
+  async function copyPermalinkToClipboard(){
+    updatePermalinkNow();
+    const txt = location.href;
+    try{
+      await navigator.clipboard.writeText(txt);
+      setStatus("Link copied ✅");
+    }catch(e){
+      const ta = document.createElement("textarea");
+      ta.value = txt; ta.style.position = "fixed"; ta.style.left = "-9999px";
+      document.body.appendChild(ta); ta.select();
+      try{ document.execCommand("copy"); setStatus("Link copied ✅"); }
+      catch(_){ setStatus("Could not copy link (browser blocked clipboard)."); }
+      document.body.removeChild(ta);
+    }
+  }
+
+  let lastZoomTransform = d3.zoomIdentity;
+
+  function applyFocusStyles(){
+    if(!gCities) return;
+    gCities.selectAll("g.city").classed("focused", d => cityKey(d) === focusedKey);
+  }
+
+  function applyPinsFromKeys(keys){
+    pinned.clear();
+    for(const k of keys){
+      const city = CITIES.find(d => `${d.city},${d.state}` === k);
+      if(city){ pinned.set(k, city); ensureCensus(city); }
+    }
+    savePinned();
+  }
+
+  function applyPermalinkState(st){
+    suppressPermalink = true;
+    if(typeof st.hour === "number"){
+      selectedHourIndex = _clampInt(st.hour, 0, 71, 0);
+      if(daySlider) daySlider.value = String(selectedHourIndex);
+      updateDayLabelUI();
+    }
+    if(st.mode){
+      colorMode = (st.mode === "precip") ? "precip" : "temp";
+      if(colorModeSelect) colorModeSelect.value = colorMode;
+    }
+    if(typeof st.surface === "number"){
+      surfaceEnabled = !!st.surface;
+      if(surfaceToggle) surfaceToggle.checked = surfaceEnabled;
+      gSurface.style("display", surfaceEnabled ? null : "none");
+    }
+    if(st.pins) applyPinsFromKeys(st.pins);
+    if(st.focus){ focusedKey = st.focus; pendingFocusKey = st.focus; }
+    if(st.z){
+      pendingZoomState = st.z;
+      lastZoomTransform = d3.zoomIdentity.translate(st.z.x, st.z.y).scale(st.z.k);
+    }
+    suppressPermalink = false;
+  }
+
+  function applyPendingZoomIfAny(){
+    if(!pendingZoomState || !zoom) return;
+    const t = d3.zoomIdentity.translate(pendingZoomState.x, pendingZoomState.y).scale(pendingZoomState.k);
+    svg.call(zoom.transform, t);
+    pendingZoomState = null;
+  }
+
+  const legendTagEl = document.getElementById('legendTag');
+  const pinnedPanelEl = document.getElementById('pinnedPanel');
+  const pinnedListEl = document.getElementById('pinnedList');
+  const svg = d3.select("#map");
+  const gRoot = svg.append("g").attr("class", "root");
+  const defs = svg.append("defs");
+  const landClip = defs.append("clipPath").attr("id", "land-clip");
+  const landClipPath = landClip.append("path");
+  const gLand = gRoot.append("g").attr("class", "land");
+  const gSurface = gRoot.append("g").attr("class", "surface").attr("clip-path", "url(#land-clip)");
+  const gBorders = gRoot.append("g").attr("class", "borders");
+  const gCities = gRoot.append("g").attr("class", "cities");
+
+  let projection = d3.geoAlbersUsa();
+  let path = d3.geoPath(projection);
+  let zoom;
+  let mapWidth = 0;
+  let mapHeight = 0;
+  const SURFACE_CELL_PX = 12; 
+
+  function todayLocalISO() { return new Date().toLocaleDateString('en-CA'); }
+  function cacheKey(city) { return `wxv${CACHE_VERSION}:${city.city},${city.state}`; }
+
+  function readCache(city) {
+    try {
+      const raw = localStorage.getItem(cacheKey(city));
+      if (!raw) return null;
+      const obj = JSON.parse(raw);
+      if (!obj || !obj.fetchedAt) return null;
+      if (Date.now() - obj.fetchedAt > WEATHER_STALE_MS) return null;
+      const { fetchedAt, ...payload } = obj;
+      return { payload, fetchedAt };
+    } catch { return null; }
+  }
+
+  function writeCache(city, payload, fetchedAt = Date.now()) {
+    try { localStorage.setItem(cacheKey(city), JSON.stringify({ ...payload, fetchedAt })); } catch {}
+  }
+
+  async function fetchJSONWithTimeout(url, timeoutMs) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { headers: { "Accept": "application/json" }, signal: ctrl.signal });
+      if (!res.ok) throw new Error(`Fetch failed (${res.status})`);
+      return await res.json();
+    } finally { clearTimeout(t); }
+  }
+
+  async function fetchWeatherNetwork(city) {
+    // NEW HOURLY PRECIP FETCH INCLUDED HERE
+    const url =
+      `https://api.open-meteo.com/v1/forecast?latitude=${city.lat}&longitude=${city.lon}` +
+      `&current=temperature_2m,apparent_temperature,relative_humidity_2m,cloud_cover,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m` +
+      `&hourly=temperature_2m,precipitation_probability` +
+      `&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max` +
+      `&forecast_days=3&timezone=auto&temperature_unit=fahrenheit&wind_speed_unit=mph`;
+
+    const data = await fetchJSONWithTimeout(url, WEATHER_FETCH_TIMEOUT_MS);
+    const dates = data?.daily?.time ?? [];
+    const highs = data?.daily?.temperature_2m_max ?? [];
+    const lows  = data?.daily?.temperature_2m_min ?? [];
+    const precip = data?.daily?.precipitation_probability_max ?? [];
+    const cur = data?.current ?? {};
+
+    const hourlyTimes = data?.hourly?.time ?? [];
+    const hourlyTemps = data?.hourly?.temperature_2m ?? [];
+    const hourlyPrecip = data?.hourly?.precipitation_probability ?? [];
+
+    return {
+      dates: [dates?.[0] ?? null, dates?.[1] ?? null, dates?.[2] ?? null],
+      hi:    [highs?.[0] ?? null, highs?.[1] ?? null, highs?.[2] ?? null],
+      lo:    [lows?.[0]  ?? null, lows?.[1]  ?? null, lows?.[2]  ?? null],
+      precip:[precip?.[0]?? null, precip?.[1]?? null, precip?.[2]?? null],
+      current: {
+        time: cur?.time ?? null,
+        temp: cur?.temperature_2m ?? null,
+        feels: cur?.apparent_temperature ?? null,
+        humidity: cur?.relative_humidity_2m ?? null,
+        cloud: cur?.cloud_cover ?? null,
+        code: cur?.weather_code ?? null,
+        windSpeed: cur?.wind_speed_10m ?? null,
+        windDir: cur?.wind_direction_10m ?? null,
+        windGust: cur?.wind_gusts_10m ?? null
+      },
+      hourly: {
+        time: hourlyTimes,
+        temp: hourlyTemps,
+        precip: hourlyPrecip
+      }
+    };
+  }
+
+  function shouldRefreshFromNetwork(city) {
+    const m = city?._wxMeta;
+    if (!m || m.source !== "cache" || !m.fetchedAt) return true;
+    return (Date.now() - m.fetchedAt) > WEATHER_FRESH_MS;
+  }
+
+  function formatAgeShort(ageMs) {
+    const mins = Math.max(0, Math.round(ageMs / 60000));
+    if (mins < 60) return `${mins}m`;
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return (m === 0) ? `${h}h` : `${h}h ${m}m`;
+  }
+
+  function weatherBadgeHTML(city) {
+    const m = city?._wxMeta;
+    if (!m || !m.source) return "";
+    if (m.source === "live") return `<span class="chip badge live">🟢 Live</span>`;
+    if (m.source === "cache") {
+      if (!m.fetchedAt) return `<span class="chip badge cache">🗃️ Cached</span>`;
+      const ageMs = Date.now() - m.fetchedAt;
+      return `<span class="chip badge cache">🗃️ Cached (${formatAgeShort(ageMs)} old)</span>`;
+    }
+    return `<span class="chip badge none">⚪ No data</span>`;
+  }
+
+  function degToCompass(deg){
+    if(deg == null || !isFinite(deg)) return "—";
+    const dirs = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
+    return dirs[Math.round(((deg % 360) / 22.5)) % 16];
+  }
+
+  function wxCodeToIconLabel(code){
+    const c = (code == null) ? null : Number(code);
+    if(c === null || !isFinite(c)) return {icon:"❔", label:"Unknown"};
+    if(c === 0) return {icon:"☀️", label:"Clear"};
+    if(c === 1) return {icon:"🌤️", label:"Mostly clear"};
+    if(c === 2) return {icon:"⛅", label:"Partly cloudy"};
+    if(c === 3) return {icon:"☁️", label:"Overcast"};
+    if(c === 45 || c === 48) return {icon:"🌫️", label:"Fog"};
+    if([51,53,55,56,57].includes(c)) return {icon:"🌦️", label:"Drizzle"};
+    if([61,63,65,66,67].includes(c)) return {icon:"🌧️", label:"Rain"};
+    if([71,73,75,77].includes(c)) return {icon:"🌨️", label:"Snow"};
+    if([80,81,82].includes(c)) return {icon:"🌦️", label:"Showers"};
+    if([85,86].includes(c)) return {icon:"🌨️", label:"Snow showers"};
+    if(c === 95) return {icon:"⛈️", label:"Thunderstorm"};
+    if(c === 96 || c === 99) return {icon:"⛈️", label:"Thunderstorm (hail)"};
+    return {icon:"🌡️", label:`Code ${c}`};
+  }
+
+  function fmtNum(v, digits=0){ return (v == null || !isFinite(v)) ? "—" : Number(v).toFixed(digits); }
+  function fmtInt(v){ return (v == null || !isFinite(v)) ? "—" : String(Math.round(Number(v))); }
+
+  const ACS_YEAR = 2023;
+  const CENSUS_BASE = `https://api.census.gov/data/${ACS_YEAR}/acs/acs5/profile`;
+  const CENSUS_SOURCE_TITLE = `Source: U.S. Census Bureau — American Community Survey (ACS) 5-year Data Profile (${ACS_YEAR}).`;
+  const STATE_FIPS = { AL:"01", AK:"02", AZ:"04", AR:"05", CA:"06", CO:"08", CT:"09", DE:"10", DC:"11", FL:"12", GA:"13", HI:"15", ID:"16", IL:"17", IN:"18", IA:"19", KS:"20", KY:"21", LA:"22", ME:"23", MD:"24", MA:"25", MI:"26", MN:"27", MS:"28", MO:"29", MT:"30", NE:"31", NV:"32", NH:"33", NJ:"34", NM:"35", NY:"36", NC:"37", ND:"38", OH:"39", OK:"40", OR:"41", PA:"42", RI:"44", SC:"45", SD:"46", TN:"47", TX:"48", UT:"49", VT:"50", VA:"51", WA:"53", WV:"54", WI:"55", WY:"56" };
+  const CENSUS_PLACES_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+  const CENSUS_CITY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+  function censusPlacesKey(stateFips){ return `census:places:v2:${ACS_YEAR}:${stateFips}`; }
+  function censusCityKey(stateFips, placeFips){ return `census:city:${ACS_YEAR}:${stateFips}:${placeFips}`; }
+
+  function normBasic(s){ return String(s ?? "").toLowerCase().replace(/[\u2019']/g, "").replace(/[^a-z0-9\/\-\s]/g, " ").replace(/\s+/g, " ").trim(); }
+  function normPlaceLabel(label){
+    let s = String(label ?? "").replace(/\s*\(balance\)\s*$/i, "").replace(/\s*\(.*?\)\s*$/i, (m) => m.toLowerCase().includes("balance") ? "" : m);
+    return normBasic(s.replace(/\s*(city|town|village|borough|municipio|metropolitan government|metro government|unified government|government)\s*$/i, ""));
+  }
+  function fmtPct1(v){ return (v == null || !isFinite(v)) ? "—" : `${Number(v).toFixed(1)}%`; }
+  function fmtUSD(v){ return (v == null || !isFinite(v)) ? "—" : new Intl.NumberFormat("en-US", { style:"currency", currency:"USD", maximumFractionDigits:0 }).format(Number(v)); }
+  function fmtUSDCompact(v){
+    if(v == null || !isFinite(v)) return "—";
+    const n = Number(v);
+    if(n >= 1e6) return `$${(n/1e6).toFixed(1)}M`;
+    if(n >= 1e3) return `$${(n/1e3).toFixed(1)}K`;
+    return fmtUSD(n);
+  }
+  function readLS(key){ try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } }
+  function writeLS(key, obj){ try { localStorage.setItem(key, JSON.stringify(obj)); } catch {} }
+
+  async function ensurePlaceIndex(stateFips){
+    const key = censusPlacesKey(stateFips);
+    const cached = readLS(key);
+    if(cached && cached.ts && (Date.now() - cached.ts) < CENSUS_PLACES_TTL_MS && Array.isArray(cached.entries)) return cached.entries;
+    const url = `${CENSUS_BASE}?get=NAME&for=place:*&in=state:${stateFips}`;
+    const rows = await fetchJsonWithTimeout(url, 20000);
+    const entries = [];
+    for(let i=1;i<rows.length;i++){
+      const r = rows[i];
+      const k = normPlaceLabel(String(r[0]).split(",")[0]);
+      if(k && r[2]) entries.push([k, r[2], r[0]]);
+    }
+    writeLS(key, {ts: Date.now(), entries});
+    return entries;
+  }
+
+  function pickBestPlace(entries, cityName){
+    const cityKey = normBasic(cityName);
+    if(!cityKey) return null;
+    let exact = entries.find(e => e[0] === cityKey);
+    if(exact) return exact;
+    const candidates = entries.filter(e => e[0].startsWith(cityKey) || cityKey.startsWith(e[0]) || e[0].includes(cityKey));
+    if(candidates.length === 0) return null;
+    candidates.sort((a,b) => {
+      const aSW = a[0].startsWith(cityKey) ? 0 : 1; const bSW = b[0].startsWith(cityKey) ? 0 : 1;
+      if(aSW !== bSW) return aSW - bSW;
+      const da = Math.abs(a[0].length - cityKey.length); const db = Math.abs(b[0].length - cityKey.length);
+      if(da !== db) return da - db;
+      return a[0].length - b[0].length;
+    });
+    return candidates[0];
+  }
+
+  async function fetchCensusForCity(city){
+    const stateFips = STATE_FIPS[String(city?.state ?? "").toUpperCase()];
+    if(!stateFips) throw new Error(`No state FIPS`);
+    const entries = await ensurePlaceIndex(stateFips);
+    const match = pickBestPlace(entries, city.city);
+    if(!match) throw new Error(`Place not found`);
+    const cacheKey = censusCityKey(stateFips, match[1]);
+    const cached = readLS(cacheKey);
+    if(cached && cached.ts && (Date.now() - cached.ts) < CENSUS_CITY_TTL_MS && cached.data) return cached.data;
+    const url = `${CENSUS_BASE}?get=NAME,DP02_0068PE,DP03_0062E&for=place:${match[1]}&in=state:${stateFips}`;
+    const rows = await fetchJsonWithTimeout(url, 15000);
+    const r = rows?.[1];
+    if(!r) throw new Error(`Unexpected Census`);
+    const data = { name: r[0], bachelorsPct: r[1] ? Number(r[1]) : null, medianIncome: r[2] ? Number(r[2]) : null, acsYear: ACS_YEAR };
+    writeLS(cacheKey, {ts: Date.now(), data});
+    return data;
+  }
+
+  async function ensureCensus(city){
+    if(!city || city._census || city._censusLoading || city._censusError) return;
+    city._censusLoading = true;
+    try { city._census = await fetchCensusForCity(city); city._censusError = false; }
+    catch (e) { city._census = null; city._censusError = true; }
+    finally {
+      city._censusLoading = false;
+      if(pinned && pinned.size > 0) renderPinnedPanel();
+      refreshTooltipIfHovering(city);
+    }
+  }
+
+  function showTooltip(event, d) {
+    setHoverState(d, event);
+    ensureCensus(d);
+
+    const wx = d._wx;
+    const pop = (d.pop != null) ? d.pop.toLocaleString('en-US') : "—";
+    const cen = d._census;
+    const baTxt = (cen && cen.bachelorsPct != null) ? fmtPct1(cen.bachelorsPct) : (d._censusLoading ? "…" : "—");
+    const incTxt = (cen && cen.medianIncome != null) ? fmtUSDCompact(cen.medianIncome) : (d._censusLoading ? "…" : "—");
+    
+    const cityProfileHTML = `
+      <div class="divider"></div>
+      <div class="secTitle">City profile <span class="infoIcon" title="${CENSUS_SOURCE_TITLE}">ⓘ</span></div>
+      <div class="statGrid">
+        <div class="statTile"><div class="statLabel">Bachelor’s+ (25+)</div><div class="statValue ${baTxt==="—"?"mutedVal":""}">${baTxt}</div></div>
+        <div class="statTile"><div class="statLabel">Median income</div><div class="statValue ${incTxt==="—"?"mutedVal":""}">${incTxt}</div></div>
+      </div>
+      ${d._censusError ? `<div class="muted" style="margin-top:4px;">City profile unavailable.</div>` : ""}
+    `;
+
+    if (wx === undefined || d._wxError) {
+      tooltipEl.style.display = "block";
+      tooltipEl.innerHTML = `<div><strong>${d.city}, ${d.state}</strong></div><div class="muted">Population: ${pop}</div><div class="divider"></div><div class="muted">${d._wxError ? weatherBadgeHTML(d)+" Weather unavailable." : "Loading forecast…"}</div>${cityProfileHTML}`;
+      moveTooltip(event); return;
+    }
+
+    const cur = wx.current ?? {};
+    const cond = wxCodeToIconLabel(cur.code);
+    const strip = format3DayStrip(d);
+    const spark = sparklineBlockForCity(d);
+
+    tooltipEl.style.display = "block";
+    tooltipEl.innerHTML = `
+      <div><strong>${d.city}, ${d.state}</strong></div>
+      <div class="muted">Population: ${pop}</div>
+      <div class="divider"></div>
+      <div class="nowMain"><strong>Now:</strong> ${cond.icon} ${cond.label} · ${fmtInt(cur.temp)}°F <span class="muted">(feels ${fmtInt(cur.feels)}°F)</span> <span style="margin-left:8px;">${weatherBadgeHTML(d)}</span></div>
+      <div class="chipRow">
+        <span class="chip">💧 Hum ${fmtInt(cur.humidity)}%</span>
+        <span class="chip">☁️ Clouds ${fmtInt(cur.cloud)}%</span>
+        <span class="chip">🌬️ Wind ${fmtInt(cur.windSpeed)} mph ${degToCompass(cur.windDir)}</span>
+        <span class="chip">💨 Gust ${fmtInt(cur.windGust)} mph</span>
+      </div>
+      ${spark}
+      <div class="divider"></div>
+      <div class="secTitle">3‑day forecast <span class="muted" style="font-weight:700;">(high/low + precip)</span></div>
+      <div style="margin-top:6px;">${strip}</div>
+      ${cityProfileHTML}
+    `;
+    moveTooltip(event);
+  }
+
+  function moveTooltip(event) {
+    if(event && event.clientX != null && event.clientY != null){ _lastTooltipPt = {clientX: event.clientX, clientY: event.clientY}; }
+    const bounds = document.getElementById("map").getBoundingClientRect();
+    tooltipEl.style.left = `${event.clientX - bounds.left}px`;
+    tooltipEl.style.top = `${event.clientY - bounds.top}px`;
+  }
+  function hideTooltip() { clearHoverState(); tooltipEl.style.display = "none"; }
+
+  // === NEW TIMELAPSE STATE & UI ===
+  let selectedHourIndex = 0; // 0 to 71
+  let isPlaying = false;
+  let playInterval = null;
+
+  function updateDayLabelUI(){
+    const sampleCity = CITIES.find(c => c._wx && c._wx.hourly && c._wx.hourly.time && c._wx.hourly.time.length > selectedHourIndex);
+    if(sampleCity) {
+      const dt = new Date(sampleCity._wx.hourly.time[selectedHourIndex]);
+      const formatted = dt.toLocaleTimeString([], { weekday: 'short', hour: 'numeric' });
+      if(dayLabelEl) dayLabelEl.textContent = formatted;
+      if(legendTagEl) legendTagEl.textContent = `${formatted} ${colorMode === 'precip' ? 'Precip' : 'Temp'}`;
+    } else {
+      if(dayLabelEl) dayLabelEl.textContent = `+${selectedHourIndex}h`;
+      if(legendTagEl) legendTagEl.textContent = `+${selectedHourIndex}h`;
+    }
+  }
+
+  // UPDATED TO READ HOURLY INDEX
+  function getSelectedMetric(d){
+    if(colorMode === "precip"){
+      const v = d?._wx?.hourly?.precip?.[selectedHourIndex];
+      return (typeof v === "number" && isFinite(v)) ? v : null;
+    }
+    const v = d?._wx?.hourly?.temp?.[selectedHourIndex];
+    return (typeof v === "number" && isFinite(v)) ? v : null;
+  }
+
+  const PINNED_KEY = "uswx:pins:top25";
+  const pinned = new Map(); 
+  function cityKey(d){ return `${d.city},${d.state}`; }
+  function loadPinned(){ try { const r = localStorage.getItem(PINNED_KEY); if(r) JSON.parse(r).forEach(k => { const c = CITIES.find(x => cityKey(x) === k); if(c) pinned.set(k, c); }); } catch {} }
+  function savePinned(){ try { localStorage.setItem(PINNED_KEY, JSON.stringify(Array.from(pinned.keys()))); } catch {} }
+
+  function formatDOW(dateStr){ return dateStr ? new Date(`${dateStr}T12:00:00`).toLocaleDateString(undefined, { weekday: "short" }) : "—"; }
+
+  // 3-DAY STRIP HIGHLIGHT FIX FOR TIMELAPSE
+  function format3DayStrip(city){
+    const wx = city?._wx;
+    const parts = [0,1,2].map(i => {
+      const h = (wx?.hi?.[i] != null) ? Math.round(wx.hi[i]) : "—";
+      const l = (wx?.lo?.[i] != null) ? Math.round(wx.lo[i]) : "—";
+      const p = (wx?.precip?.[i] != null) ? ` · 💧${Math.round(wx.precip[i])}%` : "";
+      const txt = `${formatDOW(wx?.dates?.[i])}: H ${h}° / L ${l}°${p}`;
+      
+      const currentDayIdx = Math.floor(selectedHourIndex / 24);
+      return (i === currentDayIdx) ? `<span class="sel">${txt}</span>` : txt;
+    });
+    return parts.join("  |  ");
+  }
+
+  function animateHoverRing(city){
+    try {
+      const ring = d3.selectAll("g.city").filter(d => cityKey(d) === cityKey(city)).select("circle.hover-ring");
+      if (!ring.empty()) ring.interrupt("ring").attr("r", 5.5).style("opacity", 0.65).transition("ring").duration(1000).ease(d3.easeCubicOut).attr("r", 15).style("opacity", 0);
+    } catch(e) {}
+  }
+  function pulseDotOnce(city){
+    try {
+      const dot = d3.selectAll("g.city").filter(d => cityKey(d) === cityKey(city)).select("circle.city-dot");
+      if(!dot.empty()) dot.interrupt("pulse").transition("pulse").duration(140).attr("r", 6).transition("pulse").duration(260).attr("r", parseFloat(dot.attr("r")) || 4.85);
+    } catch(e) {}
+  }
+
+  function getNext24Temps(wx){
+    const times = wx?.hourly?.time ?? [];
+    const temps = wx?.hourly?.temp ?? [];
+    if(!times.length || !temps.length) return null;
+    let idx = 0, ct = wx?.current?.time;
+    if(ct){
+      idx = times.indexOf(ct);
+      if(idx < 0 && ct.length >= 13) { const h = ct.slice(0,13)+":00"; idx = times.indexOf(h); if(idx < 0) idx = times.findIndex(t => t >= h); }
+      if(idx < 0) idx = 0;
+    }
+    const slice = temps.slice(idx, idx + 24).filter(v => v != null && isFinite(v));
+    return slice.length >= 2 ? slice : null;
+  }
+
+  function sparklineSVG(temps){
+    const W = 230, H = 46, P = 4, n = temps.length;
+    let min = Infinity, max = -Infinity;
+    for (const t of temps){ if(t < min) min = t; if(t > max) max = t; }
+    if(!isFinite(min) || !isFinite(max)) return "";
+    const span = (max - min) || 1;
+    const x = (i) => P + (i * (W - 2*P) / (n - 1));
+    const y = (t) => P + ((max - t) * (H - 2*P) / span);
+    let d = ""; for(let i=0;i<n;i++) d += (i===0 ? "M" : "L") + x(i).toFixed(2) + "," + y(temps[i]).toFixed(2);
+    const dArea = d + `L${x(n-1).toFixed(2)},${(H-P).toFixed(2)}L${x(0).toFixed(2)},${(H-P).toFixed(2)}Z`;
+    return `<div class="sparkWrap"><div class="sparkHead"><div class="sparkTitle">Next 24h temp</div><div class="sparkMinMax">${Math.round(min)}°–${Math.round(max)}°</div></div><div class="sparkBox"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><path class="sparkArea" d="${dArea}"></path><path class="sparkLine" d="${d}"></path><circle class="sparkEnd" cx="${x(n-1).toFixed(2)}" cy="${y(temps[n-1]).toFixed(2)}" r="2.6"></circle></svg></div></div>`;
+  }
+  function sparklineBlockForCity(city){ const temps = getNext24Temps(city?._wx); return temps ? sparklineSVG(temps) : ""; }
+
+  function renderPinnedPanel(){
+    if(!pinnedPanelEl || !pinnedListEl) return;
+    const keys = Array.from(pinned.keys());
+    if(keys.length === 0){ pinnedPanelEl.style.display = "none"; return; }
+    pinnedPanelEl.style.display = "block";
+
+    pinnedListEl.innerHTML = keys.slice().reverse().map(k => {
+      const c = pinned.get(k); ensureCensus(c);
+      let nowLine = `<span style="color: var(--muted);">Loading…</span>`, detailLine = "", strip = "";
+      if (c?._wxError) nowLine = `${weatherBadgeHTML(c)} Weather unavailable.`;
+      else if (c?._wx) {
+        const cur = c._wx.current ?? {}; const cond = wxCodeToIconLabel(cur.code);
+        nowLine = `${cond.icon} ${cond.label} · ${fmtInt(cur.temp)}°F <span style="color: var(--muted);">(feels ${fmtInt(cur.feels)}°F)</span> ${weatherBadgeHTML(c)}`;
+        detailLine = `Hum ${fmtInt(cur.humidity)}% · Clouds ${fmtInt(cur.cloud)}% · Wind ${fmtInt(cur.windSpeed)} mph ${degToCompass(cur.windDir)}`;
+        strip = format3DayStrip(c);
+      }
+      const cen = c?._census;
+      const profileHTML = `<div class="pinProfileTitle">City profile</div><div class="pinStatGrid"><div class="pinStatTile"><div class="pinStatLabel">Bachelor’s+</div><div class="pinStatValue">${cen?.bachelorsPct != null ? fmtPct1(cen.bachelorsPct) : "—"}</div></div><div class="pinStatTile"><div class="pinStatLabel">Income</div><div class="pinStatValue">${cen?.medianIncome != null ? fmtUSDCompact(cen.medianIncome) : "—"}</div></div></div>`;
+      return `<div class="pinRow"><div class="pinMain"><div class="pinCity"><strong>${c.city}, ${c.state}</strong></div><div class="pinMeta">${nowLine}</div>${detailLine ? `<div class="pinMeta">${detailLine}</div>` : ``}<div class="pinStrip">${strip}</div>${profileHTML}</div><button class="pinRemove" data-key="${k}">✕</button></div>`;
+    }).join("");
+  }
+
+  function updatePinnedStyles(){
+    gCities.selectAll("g.city").classed("pinned", d => pinned.has(cityKey(d)));
+    gCities.selectAll("g.city circle.city-dot").attr("r", d => pinned.has(cityKey(d)) ? 6.3 : 4.85).style("stroke-width", d => pinned.has(cityKey(d)) ? 2.2 : 0.8).style("stroke", d => pinned.has(cityKey(d)) ? "rgba(255,255,255,0.9)" : "rgba(0,0,0,0.35)");
+  }
+  function togglePin(d){
+    const k = cityKey(d); focusedKey = k;
+    if(pinned.has(k)) pinned.delete(k); else { pinned.delete(k); pinned.set(k, d); ensureCensus(d); }
+    savePinned(); renderPinnedPanel(); updatePinnedStyles(); applyFocusStyles(); schedulePermalinkUpdate();
+  }
+
+  function debounce(fn, ms = 120) { let t; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); }; }
+
+  async function asyncPool(limit, items, iteratorFn) {
+    const ret = [], executing = [];
+    for (const item of items) {
+      const p = Promise.resolve().then(() => iteratorFn(item)); ret.push(p);
+      if (limit <= items.length) {
+        const e = p.then(() => executing.splice(executing.indexOf(e), 1));
+        executing.push(e); if (executing.length >= limit) await Promise.race(executing);
+      }
+    }
+    return Promise.allSettled(ret);
+  }
+
+  let colorScale = null, lastMinHigh = null, lastMaxHigh = null;
+
+  function updateSurfaceOverlay(animated){
+    if(!surfaceEnabled || !mapWidth || !mapHeight || !colorScale){ gSurface.style("display","none"); return; }
+    const pts = [];
+    for(const c of CITIES){
+      const v = getSelectedMetric(c);
+      if(v != null && c._xy) pts.push({x: c._xy[0], y: c._xy[1], v});
+    }
+    if(pts.length < 3){ gSurface.style("display","none"); return; }
+    gSurface.style("display", null);
+
+    const cell = SURFACE_CELL_PX;
+    const gw = Math.max(30, Math.round(mapWidth / cell));
+    const gh = Math.max(20, Math.round(mapHeight / cell));
+    const values = new Array(gw * gh);
+    for(let j=0; j<gh; j++){
+      const y = j * cell;
+      for(let i=0; i<gw; i++){
+        const x = i * cell;
+        let num = 0, den = 0;
+        for(const p of pts){
+          const d2 = (x - p.x)**2 + (y - p.y)**2;
+          if(d2 > 270400) continue; // 520^2 max radius
+          const w = 1 / (d2 + 1e-6); // power = 2
+          num += w * p.v; den += w;
+        }
+        values[j*gw + i] = (den > 0) ? (num/den) : NaN;
+      }
+    }
+
+    const domain = colorScale.domain();
+    const thresholds = d3.ticks(domain[0], domain[1], 14);
+    const contours = d3.contours().size([gw, gh]).thresholds(thresholds)(values);
+    const contourPath = d3.geoPath(d3.geoIdentity().scale(cell));
+
+    gSurface.selectAll("path.contour").data(contours, d => d.value).join(
+      enter => enter.append("path").attr("class", "contour").attr("d", contourPath).attr("fill", d => colorScale(d.value)).attr("opacity", 0.0).call(enter => enter.transition().duration(animated ? 320 : 0).attr("opacity", 0.38)),
+      update => update.call(update => animated ? update.transition().duration(320).attr("d", contourPath).attr("fill", d => colorScale(d.value)) : update.attr("d", contourPath).attr("fill", d => colorScale(d.value))),
+      exit => exit.call(exit => exit.transition().duration(200).attr("opacity", 0).remove())
+    );
+  }
+
+  function applyDotColors(animated = true) {
+    gCities.selectAll("g.city circle.city-dot").style("fill", d => {
+      if (d._wx === undefined) return LOADING_COLOR;
+      if (d._wxError) return ERROR_COLOR;
+      const v = getSelectedMetric(d);
+      if (colorScale && lastMinHigh != null && lastMaxHigh != null && v != null) return colorScale(v);
+      return (d._wx && v != null) ? "var(--accent)" : ERROR_COLOR;
+    });
+    updateSurfaceOverlay(!!animated);
+  }
+
+  function updateLegend() {
+    const legend = document.getElementById("legend");
+    const bar = document.getElementById("legendBar");
+    const minEl = document.getElementById("legendMin");
+    const maxEl = document.getElementById("legendMax");
+    if (!legend || !bar || !minEl || !maxEl) return;
+    if (!colorScale || lastMinHigh == null || lastMaxHigh == null || !isFinite(lastMinHigh) || !isFinite(lastMaxHigh)) { legend.style.display = "none"; return; }
+
+    const parts = [];
+    for (let i = 0; i <= 12; i++) parts.push(`${colorScale(lastMinHigh + (lastMaxHigh - lastMinHigh) * (i/12))} ${(i/12 * 100).toFixed(1)}%`);
+    bar.style.background = `linear-gradient(to right, ${parts.join(", ")})`;
+    const unit = (colorMode === "precip") ? "%" : "°";
+    minEl.textContent = `${Math.round(lastMinHigh)}${unit} (min)`;
+    maxEl.textContent = `${Math.round(lastMaxHigh)}${unit} (max)`;
+    legend.style.display = "flex";
+  }
+
+  function computeScaleFromLoaded(animated = true) {
+    const vals = [];
+    for (const c of CITIES) { const v = getSelectedMetric(c); if (typeof v === "number" && isFinite(v)) vals.push(v); }
+    if (vals.length < 2) { applyDotColors(false); updateLegend(); return; }
+    
+    let vMin = d3.min(vals), vMax = d3.max(vals);
+    if (vMin === vMax) { vMin -= 1; vMax += 1; }
+    lastMinHigh = vMin; lastMaxHigh = vMax;
+
+    if (colorMode === "precip") {
+      colorScale = d3.scaleSequential().domain([Math.max(0, vMin) - 2, Math.min(100, vMax) + 2]).interpolator(d3.interpolateBlues).clamp(true);
+    } else {
+      const pad = Math.max(1, (vMax - vMin) * 0.06);
+      colorScale = d3.scaleSequential().domain([vMin - pad, vMax + pad]).interpolator(d3.interpolateTurbo).clamp(true);
+    }
+    applyDotColors(!!animated);
+    updateLegend();
+  }
+
+  function initZoom(width, height) {
+    zoom = d3.zoom().scaleExtent([1, 8]).translateExtent([[0, 0], [width, height]]).extent([[0, 0], [width, height]])
+      .on("zoom", (event) => { lastZoomTransform = event.transform; gRoot.attr("transform", event.transform); })
+      .on("end", () => { lastZoomTransform = d3.zoomTransform(svg.node()); schedulePermalinkUpdate(); });
+    svg.call(zoom);
+    applyPendingZoomIfAny();
+    if(pendingFocusKey){ focusedKey = pendingFocusKey; pendingFocusKey = null; applyFocusStyles(); }
+    if(!permalinkReady){ permalinkReady = true; suppressPermalink = false; updatePermalinkNow(); }
+  }
+
+  function resetView() { svg.transition().duration(350).call(zoom.transform, d3.zoomIdentity); }
+
+  function render(us) {
+    const node = document.getElementById("map");
+    const width = Math.max(320, node.clientWidth), height = Math.max(420, node.clientHeight);
+    svg.attr("viewBox", `0 0 ${width} ${height}`);
+    mapWidth = width; mapHeight = height;
+
+    const states = topojson.feature(us, us.objects.states);
+    projection = d3.geoAlbersUsa().fitSize([width, height], states);
+    path = d3.geoPath(projection);
+
+    gLand.selectAll("*").remove(); gSurface.selectAll("*").remove(); gBorders.selectAll("*").remove();
+    gLand.selectAll("path.state-fill").data(states.features).join("path").attr("class", "state-fill").attr("d", path);
+    landClipPath.datum(topojson.feature(us, us.objects.nation)).attr("d", path);
+    gBorders.append("path").datum(topojson.mesh(us, us.objects.states, (a,b)=>a!==b)).attr("class", "state-borders").attr("d", path);
+    gBorders.append("path").datum(topojson.mesh(us, us.objects.nation, (a,b)=>a===b)).attr("class", "nation-outline").attr("d", path);
+
+    gCities.selectAll("g.city").data(CITIES, d => `${d.city}-${d.state}`).join(enter => {
+      const g = enter.append("g").attr("class", "city");
+      g.append("circle").attr("class", "hit-area").attr("r", 11).style("fill", "transparent");
+      g.append("circle").attr("class", "hover-ring").attr("r", 4.85).style("fill", "none");
+      g.append("circle").attr("class", "city-dot").attr("r", 4.85).style("fill", LOADING_COLOR);
+      g.on("mouseenter", (event, d) => { animateHoverRing(d); showTooltip(event, d); })
+       .on("mousemove", (event) => moveTooltip(event))
+       .on("mouseleave", hideTooltip)
+       .on("click", (event, d) => { event.stopPropagation(); togglePin(d); });
+      return g;
+    }).attr("transform", d => {
+      d._xy = projection([d.lon, d.lat]) || null;
+      return d._xy ? `translate(${d._xy[0]},${d._xy[1]})` : "translate(-999,-999)";
+    });
+
+    applyDotColors(false); updatePinnedStyles(); initZoom(width, height);
+  }
+
+  async function loadAllWeather(opts = {}) {
+    const force = !!opts.force;
+    let done = 0, failed = 0, cacheHits = 0;
+
+    for (const c of CITIES) {
+      c._wxError = false; c._pulsed = false;
+      const cached = readCache(c);
+      if (cached) { c._wx = cached.payload; c._wxMeta = { source: "cache", fetchedAt: cached.fetchedAt }; cacheHits++; }
+      else { c._wx = undefined; c._wxMeta = { source: "none", fetchedAt: null }; }
+    }
+    computeScaleFromLoaded(false); applyDotColors(false); if (pinned.size > 0) renderPinnedPanel();
+    setProgress(0, CITIES.length, 0);
+    setStatus(cacheHits > 0 ? `Loaded cached weather for ${cacheHits}/${CITIES.length} cities. Refreshing…` : `Fetching weather… (0/${CITIES.length})`);
+
+    await asyncPool(CONCURRENCY, CITIES, async (city) => {
+      if (force || shouldRefreshFromNetwork(city)) {
+        try {
+          const wx = await fetchWeatherNetwork(city);
+          city._wx = wx; city._wxError = false; city._wxMeta = { source: "live", fetchedAt: Date.now() };
+          writeCache(city, wx, city._wxMeta.fetchedAt);
+          if (!city._pulsed) { city._pulsed = true; pulseDotOnce(city); }
+          refreshTooltipIfHovering(city);
+        } catch (err) {
+          if (!(city._wx && city._wxMeta?.source === "cache")) { city._wx = null; city._wxError = true; failed++; }
+        }
+      }
+      computeScaleFromLoaded(true); if (pinned.size > 0) renderPinnedPanel();
+      done++; setProgress(done, CITIES.length, failed); setStatus(`Fetching weather… (${done}/${CITIES.length})`);
+    });
+
+    setStatus(`Done. Updated ${CITIES.length - failed}/${CITIES.length} cities${failed ? ` (${failed} unavailable)` : ""}.`);
+    computeScaleFromLoaded(false); applyDotColors(false);
+    requestAnimationFrame(() => { computeScaleFromLoaded(false); applyDotColors(false); });
+    renderPinnedPanel();
+    
+    // Automatically find the "current" hour once data loads
+    if (selectedHourIndex === 0) {
+      const currentHrStr = new Date().toISOString().slice(0,13) + ":00";
+      const sample = CITIES.find(c => c._wx?.hourly?.time);
+      if (sample) {
+        const idx = sample._wx.hourly.time.findIndex(t => t >= currentHrStr);
+        if (idx !== -1) {
+          selectedHourIndex = idx;
+          if (daySlider) daySlider.value = selectedHourIndex;
+          updateDayLabelUI();
+          computeScaleFromLoaded(false);
+        }
+      }
+    }
+  }
+
+  async function main() {
+    try {
+      setStatus("Loading map…"); const us = await loadUSAtlasStates(); render(us);
+      setStatus("Map ready. Fetching weather…"); await loadAllWeather();
+      computeScaleFromLoaded(false); applyDotColors(false);
+    } catch (e) { setStatus("Error loading map or weather."); }
+  }
+
+  refreshBtn.addEventListener("click", async () => { colorScale = null; lastMinHigh = null; lastMaxHigh = null; applyDotColors(false); updateLegend(); await loadAllWeather({ force: true }); });
+  zoomInBtn.addEventListener("click", () => { svg.transition().duration(200).call(zoom.scaleBy, 1.25); });
+  zoomOutBtn.addEventListener("click", () => { svg.transition().duration(200).call(zoom.scaleBy, 0.8); });
+  resetBtn.addEventListener("click", resetView);
+  if(copyLinkBtn) copyLinkBtn.addEventListener("click", copyPermalinkToClipboard);
+
+  // NEW TIMELAPSE LISTENERS
+  if(daySlider){
+    daySlider.addEventListener("input", () => {
+      selectedHourIndex = Math.max(0, Math.min(71, +daySlider.value || 0));
+      updateDayLabelUI(); 
+      computeScaleFromLoaded(false); // Scrub fast, no animation
+      renderPinnedPanel();
+      schedulePermalinkUpdate();
+      if(isPlaying) {
+        isPlaying = false;
+        if(playBtn) playBtn.textContent = "▶️";
+        clearInterval(playInterval);
+      }
+    });
+  }
+
+  if(playBtn) {
+    playBtn.addEventListener('click', () => {
+      isPlaying = !isPlaying;
+      playBtn.textContent = isPlaying ? "⏸️" : "▶️";
+      if (isPlaying) {
+        playInterval = setInterval(() => {
+          selectedHourIndex++;
+          if (selectedHourIndex > 71) selectedHourIndex = 0; // Loop back
+          if (daySlider) daySlider.value = selectedHourIndex;
+          updateDayLabelUI();
+          computeScaleFromLoaded(true); // Animate contours smoothly
+          renderPinnedPanel();
+        }, 500); // 500ms per frame
+      } else {
+        clearInterval(playInterval);
+      }
+    });
+  }
+
+  if(pinnedListEl){
+    pinnedListEl.addEventListener("click", (e) => {
+      const btn = e.target.closest("button.pinRemove"); if(!btn) return;
+      const k = btn.getAttribute("data-key"); if(!k) return;
+      pinned.delete(k); savePinned(); renderPinnedPanel(); updatePinnedStyles(); schedulePermalinkUpdate();
+    });
+  }
+
+  svg.on("click", () => hideTooltip());
+  window.addEventListener("resize", debounce(async () => { try { render(await loadUSAtlasStates()); } catch {} }));
+
+  const _urlState = readPermalinkFromURL();
+  if(_urlState){
+    applyPermalinkState(_urlState);
+    if(!_urlState.pins) loadPinned();
+    if(daySlider) daySlider.value = String(selectedHourIndex);
+    updateDayLabelUI();
+  } else {
+    if(daySlider) selectedHourIndex = Math.max(0, Math.min(71, +daySlider.value || 0));
+    updateDayLabelUI();
+    if(daySlider) daySlider.value = String(selectedHourIndex);
+    loadPinned(); suppressPermalink = false;
+  }
+  renderPinnedPanel(); main();
+  }
+  start();
+  </script>
+</body>
+</html>

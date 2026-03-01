@@ -1,0 +1,179 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>US City Weather Map (Time-Lapse, Emojis, AQI)</title>
+    <link rel="stylesheet" href="styles/main.css" />
+</head>
+<body>
+  <header>
+    <div class="headerLeft title">
+      <div class="titleRow">
+        <h1>US Weather Map - Top 50 Cities (Time-Lapse & Emojis)</h1>
+        <details class="metaInfo">
+          <summary aria-label="About this app">i</summary>
+          <div class="metaPanel">Modular files (HTML/CSS/JS). Fetches free forecasts from Open-Meteo, WAQI & US Census.</div>
+        </details>
+      </div>
+      <div class="sub">Weather + AQI + census insights for top US cities.</div>
+    </div>
+
+    <div class="headerCenter">
+      <div class="dayControl" title="Scrub through the next 72 hours">
+        <button id="playBtn" aria-label="Play timeline">▶</button>
+        <span class="dayEdge">Now</span>
+        <span class="dayLabel" id="dayLabel">Now</span>
+        <input id="daySlider" type="range" min="0" max="71" step="1" value="0" aria-label="Select hour" />
+        <span class="dayEdge">+72h</span>
+        <span class="modeInfoChip" id="modeInfoChip" hidden>Coldest Mode</span>
+      </div>
+      <div class="modeSubnote" id="modeSubnote" hidden>Map color uses each city's coldest low from loaded data.</div>
+    </div>
+
+    <div class="headerRight actions">
+      <button id="refreshBtn" title="Re-fetch weather data">Refresh</button>
+      <button id="addCityBtn" title="Add a city to the map">+ Add City</button>
+      <button id="logMemoryBtn" title="Log a memory for a city">+ Log Memory</button>
+
+      <details class="actionMenu">
+        <summary>Customize</summary>
+        <div class="actionPanel">
+          <div class="menuSection">
+            <div class="menuSectionTitle">Map Layers</div>
+            <div class="modeControl" title="Choose what the map colors represent (dots + surface)">
+              <span class="pill">Color</span>
+              <select id="colorModeSelect" aria-label="Color mode">
+                <option value="temp" selected>Temp (Hourly)</option>
+                <option value="precip">Precip (%) (Hourly)</option>
+                <option value="aqi">Air Quality (AQI)</option>
+                <option value="coldest">Coldest Day (Best Available)</option>
+              </select>
+            </div>
+            <div class="modeHelp">Best available: computed from currently loaded weather data window.</div>
+            <label class="toggle" title="Show a soft surface between cities">
+              <input type="checkbox" id="surfaceToggle" checked />
+              <span>Surface</span>
+            </label>
+            <label class="toggle" title="Show local major games in tooltips and pinned cards">
+              <input type="checkbox" id="sportsFilterToggle" />
+              <span>Game Day</span>
+            </label>
+          </div>
+
+          <div class="menuSection">
+            <div class="menuSectionTitle">Modes & Themes</div>
+            <div class="tmControl" title="Switch between live forecast and archived weather">
+              <label class="toggle tmToggle">
+                <input type="checkbox" id="timeMachineToggle" />
+                <span>Time Machine</span>
+              </label>
+              <div class="tmDateWrap" id="tmDateWrap" hidden>
+                <input type="date" id="historicalDateInput" aria-label="Historical start date" />
+              </div>
+            </div>
+            <label class="toggle tmToggle" title="Enable The Upside Down protocol">
+              <input type="checkbox" id="upsideDownToggle" />
+              <span>The Upside Down</span>
+            </label>
+            <label class="toggle tmToggle" title="Enable horror styling and horror city set">
+              <input type="checkbox" id="spookyThemeToggle" />
+              <span>Spooky Theme</span>
+            </label>
+            <button id="addCityMenuBtn" type="button" class="menuButton">+ Add City</button>
+          </div>
+        </div>
+      </details>
+    </div>
+  </header>
+
+  <div id="memoryFormWrap" hidden>
+    <form id="memoryForm" class="memoryForm" autocomplete="off">
+      <label for="memoryCitySelect">City</label>
+      <select id="memoryCitySelect" required></select>
+      <label for="memoryDateInput">Date</label>
+      <input id="memoryDateInput" type="date" required />
+      <label for="memoryNoteInput">Note</label>
+      <textarea id="memoryNoteInput" rows="2" maxlength="280" placeholder="Short memory note..." required></textarea>
+      <div class="memoryActions">
+        <button type="submit" id="memorySaveBtn">Save</button>
+        <button type="button" id="memoryCancelBtn">Cancel</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="memoryJournalModal" class="memoryJournalModal" hidden>
+    <div class="memoryJournalCard" role="dialog" aria-modal="true" aria-labelledby="memoryJournalTitle">
+      <div class="memoryJournalHead">
+        <h2 id="memoryJournalTitle">Memory Journal</h2>
+        <button id="memoryJournalClose" type="button" aria-label="Close memory journal">✕</button>
+      </div>
+      <div id="memoryJournalList" class="memoryJournalList"></div>
+    </div>
+  </div>
+
+  <div id="addCityModal" class="memoryJournalModal" hidden>
+    <div class="memoryJournalCard addCityCard" role="dialog" aria-modal="true" aria-labelledby="addCityTitle">
+      <div class="memoryJournalHead">
+        <h2 id="addCityTitle">Add a City</h2>
+        <button id="addCityClose" type="button" aria-label="Close add city form">✕</button>
+      </div>
+      <form id="addCityForm" class="memoryForm addCityForm" autocomplete="off">
+        <p class="addCityIntro">Enter a U.S. city and state. We will locate coordinates automatically.</p>
+        <div id="addCityError" class="formMessage formError" hidden></div>
+        <div id="addCitySuccess" class="formMessage formSuccess" hidden></div>
+        <label for="addCityNameInput">City</label>
+        <input id="addCityNameInput" type="text" maxlength="64" placeholder="e.g., Albany" required />
+        <label for="addCityStateInput">State (2-letter)</label>
+        <input id="addCityStateInput" type="text" maxlength="2" placeholder="NY" required />
+        <div class="memoryActions">
+          <button type="button" id="addCityCancel">Cancel</button>
+          <button type="submit" id="addCitySubmit">Add City</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="wrap">
+    <div id="mapWrap">
+      <div class="map-controls" aria-label="Map controls">
+        <button id="zoomInBtn" title="Zoom in">+</button>
+        <button id="zoomOutBtn" title="Zoom out">-</button>
+        <button id="resetBtn" title="Reset zoom/pan">⌂</button>
+        <button id="locateBtn" title="Show My Location" aria-label="Show My Location">◎</button>
+        <button id="copyLinkBtn" title="Copy a shareable link that restores this exact view">⧉</button>
+      </div>
+      <svg id="map" role="img" aria-label="Map of the United States with city forecasts"></svg>
+      <div id="tooltip"></div>
+      <div id="pinnedPanel" aria-label="Pinned cities" style="display:none;">
+        <div class="panelHead">
+          <span class="panelTitle">Pinned cities</span>
+          <span class="panelHint" id="pinnedHint">Click dots to pin</span>
+        </div>
+        <div id="pinnedList"></div>
+      </div>
+      <div id="status">
+        <span class="dot"></span>
+        <span id="statusText">Loading map...</span>
+        <div class="progressTrack" id="progressTrack" aria-hidden="true">
+          <div class="progressFill" id="progressFill"></div>
+        </div>
+      </div>
+      <div id="legend" style="display:none;">
+        <span class="tag" id="legendTag">Now</span>
+        <div class="minmax">
+          <span id="legendMin"></span>
+          <div class="bar" id="legendBar"></div>
+          <span id="legendMax"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+    <script src="src/config/horror-cities.js"></script>
+    <script src="src/main.js"></script>
+</body>
+</html>
+
+
+
