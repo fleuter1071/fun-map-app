@@ -78,3 +78,44 @@ Implemented end-to-end support for adding custom cities (API + DB + UI), includi
 1. Run through the manual add-city checklist in UI (success, duplicate, invalid city, provider outage).
 2. Add regression tests for /api/cities create/list and front-end modal submission states.
 3. Implement custom city management (remove/edit) in the UI.
+
+## Date/time
+2026-03-01 12:18:57 -05:00
+
+## Feature name
+Dual DB Mode (SQLite local dev + Postgres production) and Dev Startup Reliability
+
+## Summary
+Implemented environment-based database switching so local development uses SQLite when `NODE_ENV=development`, while production continues to require Postgres via `DATABASE_URL`. Added startup tooling (`npm run dev` and `start-dev.bat`) and validated core API regression behavior in dev mode.
+
+## Files changed
+- C:\Users\dougs\Weather_Map_Cities_2_Codex\server.js
+- C:\Users\dougs\Weather_Map_Cities_2_Codex\package.json
+- C:\Users\dougs\Weather_Map_Cities_2_Codex\package-lock.json
+- C:\Users\dougs\Weather_Map_Cities_2_Codex\.env.example
+- C:\Users\dougs\Weather_Map_Cities_2_Codex\start-dev.bat
+
+## Assumptions
+- Local workflow should not connect to production Supabase.
+- `NODE_ENV=development` is the expected local default.
+- Render/production will keep `NODE_ENV=production` and a valid `DATABASE_URL`.
+
+## Known limitations
+- SQLite and Postgres are not perfectly behavior-identical, so some SQL edge cases may differ between local and production.
+- `/api/admin/recompute-coldest` remains unauthenticated.
+- Local startup can still fail with `EADDRINUSE` if port `8010` is already occupied.
+
+## Key learnings that you can bring with you to future sessions
+- Keeping local and production DBs separate reduces risk and speeds local QA.
+- Supabase direct connection can fail on some platforms due to IPv6 pathing; pooler URLs are safer for Render.
+- For this repo, reliable local startup requires explicitly setting `NODE_ENV=development` unless using `npm run dev` / `start-dev.bat`.
+
+## Remaining TODOs
+- Add authentication/secret protection to `/api/admin/recompute-coldest`.
+- Restrict static file serving from project root to a dedicated public directory.
+- Add production-path regression checks with live Postgres in automated tests.
+
+## Next steps
+1. Verify Render is using the Supabase pooler `DATABASE_URL` with password included and SSL mode set.
+2. Add a short README setup section for local dev (`npm run dev`) and production env vars.
+3. Push latest startup script changes if not already synced to GitHub.

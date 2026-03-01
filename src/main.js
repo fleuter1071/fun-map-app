@@ -835,9 +835,13 @@ function startApp(){
     document.body.removeAttribute("data-theme");
   }
 
-  function runThemeTransition(){
-    document.body.classList.add("theme-transition");
-    setTimeout(() => document.body.classList.remove("theme-transition"), 850);
+  function runThemeTransition(nextUpsideState){
+    const enteringUpside = !!nextUpsideState;
+    document.body.classList.remove("theme-transition-upside-enter", "theme-transition-upside-exit");
+    document.body.classList.add("theme-transition", enteringUpside ? "theme-transition-upside-enter" : "theme-transition-upside-exit");
+    setTimeout(() => {
+      document.body.classList.remove("theme-transition", "theme-transition-upside-enter", "theme-transition-upside-exit");
+    }, 1100);
   }
 
   async function setHistoricalMode(nextMode){
@@ -894,38 +898,26 @@ function startApp(){
   async function setUpsideDownMode(nextMode){
     isUpsideDownMode = !!nextMode;
     if(upsideDownToggle) upsideDownToggle.checked = isUpsideDownMode;
-    runThemeTransition();
+    runThemeTransition(isUpsideDownMode);
     applyThemeAttribute();
 
-    if(isUpsideDownMode){
-      isHistoricalMode = true;
-      historicalStartDate = "1983-11-06";
-      if(timeMachineToggle){
-        timeMachineToggle.checked = true;
-        timeMachineToggle.disabled = true;
-      }
-      if(tmDateWrap) tmDateWrap.hidden = false;
-      if(historicalDateInput){
-        historicalDateInput.max = "";
+    // Upside Down is a visual/UX mode; do not force historical weather.
+    if(timeMachineToggle){
+      timeMachineToggle.disabled = false;
+      timeMachineToggle.checked = !!isHistoricalMode;
+    }
+    if(tmDateWrap){
+      tmDateWrap.hidden = !isHistoricalMode;
+    }
+    if(historicalDateInput){
+      const maxDate = new Date();
+      maxDate.setDate(maxDate.getDate() - 7);
+      historicalDateInput.max = isoDate(maxDate);
+      if(isHistoricalMode && historicalStartDate){
         historicalDateInput.value = historicalStartDate;
       }
-      setAQIOptionEnabled(false);
-    } else {
-      isHistoricalMode = false;
-      historicalStartDate = null;
-      if(timeMachineToggle){
-        timeMachineToggle.checked = false;
-        timeMachineToggle.disabled = false;
-      }
-      if(tmDateWrap) tmDateWrap.hidden = true;
-      if(historicalDateInput){
-        const maxDate = new Date();
-        maxDate.setDate(maxDate.getDate() - 7);
-        historicalDateInput.max = isoDate(maxDate);
-        historicalDateInput.value = "";
-      }
-      setAQIOptionEnabled(true);
     }
+    setAQIOptionEnabled(!isHistoricalMode);
 
     clearAQIData();
     selectedHourIndex = 0;
@@ -1129,8 +1121,10 @@ function startApp(){
   const landClip = defs.append("clipPath").attr("id", "land-clip");
   const landClipPath = landClip.append("path");
   const gLand = gRoot.append("g").attr("class", "land");
+  const gTerrain = gRoot.append("g").attr("class", "terrain-fx").attr("clip-path", "url(#land-clip)");
   const gSurface = gRoot.append("g").attr("class", "surface").attr("clip-path", "url(#land-clip)");
   const gBorders = gRoot.append("g").attr("class", "borders");
+  const gRifts = gRoot.append("g").attr("class", "rift-overlay").attr("clip-path", "url(#land-clip)");
   const gCities = gRoot.append("g").attr("class", "cities");
   const gUserLocation = gRoot.append("g").attr("class", "user-location-layer");
 
@@ -1490,6 +1484,9 @@ function startApp(){
     const forecastCards = format3DayTooltipCards(d);
     const spark = sparklineBlockForCity(d);
     const upsideBadge = isUpsideDownMode ? `<span class="chip badge upside">Upside Down Signal</span>` : "";
+    const riftBadge = (isUpsideDownMode && d?._inRift)
+      ? `<span class="chip badge rift">Rift Interference</span>`
+      : "";
     const showColdestMode = colorMode === "coldest";
     const heroMain = showColdestMode ? coldestLowTxt : `${temp}°F`;
     const heroSummary = showColdestMode
@@ -1507,7 +1504,7 @@ function startApp(){
       <div class="tooltip-hero">
         <div class="tooltip-temp">${heroMain}</div>
         <div class="tooltip-summary">${heroSummary}</div>
-        <div class="tooltip-status">${weatherBadgeHTML(d)} ${upsideBadge}</div>
+        <div class="tooltip-status">${weatherBadgeHTML(d)} ${upsideBadge} ${riftBadge}</div>
       </div>
       ${currentSnapshotHTML}
       ${coldestInfoHTML}
@@ -1759,6 +1756,7 @@ function startApp(){
       const wxMeta = c?._wxMeta || {};
       const statusChips = [];
       if(isUpsideDownMode) statusChips.push(`<span class="pin-chip pin-chip-upside">Upside Down Signal</span>`);
+      if(isUpsideDownMode && c?._inRift) statusChips.push(`<span class="pin-chip pin-chip-rift">Rift Zone</span>`);
       if(isHistoricalMode) statusChips.push(`<span class="pin-chip">Time Machine</span>`);
       if(wxMeta.source === "live") statusChips.push(`<span class="pin-chip pin-chip-live">Live</span>`);
       if(wxMeta.source === "cache") statusChips.push(`<span class="pin-chip pin-chip-cache">Cached</span>`);
@@ -2113,6 +2111,168 @@ function startApp(){
     }
   }
 
+  function buildVeinPath(width, height, seed = 0) {
+    const startX = width * (0.08 + ((seed * 23) % 11) * 0.06);
+    const startY = height * (0.12 + ((seed * 19) % 9) * 0.07);
+    const c1x = width * (0.24 + ((seed * 17) % 10) * 0.05);
+    const c1y = height * (0.08 + ((seed * 13) % 10) * 0.07);
+    const c2x = width * (0.56 + ((seed * 29) % 10) * 0.04);
+    const c2y = height * (0.18 + ((seed * 31) % 9) * 0.08);
+    const endX = width * (0.82 + ((seed * 37) % 6) * 0.025);
+    const endY = height * (0.26 + ((seed * 41) % 9) * 0.07);
+    return `M ${startX.toFixed(1)} ${startY.toFixed(1)} C ${c1x.toFixed(1)} ${c1y.toFixed(1)}, ${c2x.toFixed(1)} ${c2y.toFixed(1)}, ${endX.toFixed(1)} ${endY.toFixed(1)}`;
+  }
+
+  function cityGroupBounds(groupKeys, keyToPointMap) {
+    const pts = groupKeys.map((k) => keyToPointMap.get(k)).filter(Boolean);
+    if (!pts.length) return null;
+    let minX = Infinity; let minY = Infinity; let maxX = -Infinity; let maxY = -Infinity;
+    pts.forEach((pt) => {
+      minX = Math.min(minX, pt[0]);
+      minY = Math.min(minY, pt[1]);
+      maxX = Math.max(maxX, pt[0]);
+      maxY = Math.max(maxY, pt[1]);
+    });
+    return { minX, minY, maxX, maxY };
+  }
+
+  function buildRiftZones(cities, projection, width, height) {
+    const metroGroups = [
+      ["Los Angeles,CA", "San Diego,CA", "San Jose,CA"],
+      ["Dallas,TX", "Houston,TX", "Chicago,IL"],
+      ["New York,NY", "Philadelphia,PA", "Boston,MA", "Washington,DC"]
+    ];
+
+    const keyToPointMap = new Map();
+    cities.forEach((city) => {
+      const key = cityKey(city);
+      const pt = projection([city.lon, city.lat]);
+      if (pt && Number.isFinite(pt[0]) && Number.isFinite(pt[1])) {
+        keyToPointMap.set(key, pt);
+      }
+    });
+
+    const zones = [];
+    metroGroups.forEach((groupKeys, idx) => {
+      const bounds = cityGroupBounds(groupKeys, keyToPointMap);
+      if (!bounds) return;
+      const cx = (bounds.minX + bounds.maxX) / 2;
+      const cy = (bounds.minY + bounds.maxY) / 2;
+      const rx = Math.max((bounds.maxX - bounds.minX) * 0.8, width * (idx === 2 ? 0.11 : 0.1));
+      const ry = Math.max((bounds.maxY - bounds.minY) * 1.4, height * 0.09);
+      const angle = idx === 0 ? -20 : (idx === 1 ? 8 : -24);
+      zones.push({
+        id: `metro-rift-${idx + 1}`,
+        cx,
+        cy,
+        rx,
+        ry,
+        angle,
+        intensity: "high"
+      });
+    });
+
+    if (!zones.length) {
+      zones.push(
+        { id: "fallback-a", cx: width * 0.24, cy: height * 0.30, rx: width * 0.2, ry: height * 0.12, angle: -18, intensity: "high" },
+        { id: "fallback-b", cx: width * 0.58, cy: height * 0.52, rx: width * 0.24, ry: height * 0.14, angle: 14, intensity: "high" },
+        { id: "fallback-c", cx: width * 0.8, cy: height * 0.33, rx: width * 0.17, ry: height * 0.1, angle: -28, intensity: "medium" }
+      );
+    }
+
+    const lockedMetroKeys = new Set(metroGroups.flat());
+    return { zones, lockedMetroKeys };
+  }
+
+  function pointInRiftZone(pt, zone) {
+    if (!pt || !zone) return false;
+    const dx = pt[0] - zone.cx;
+    const dy = pt[1] - zone.cy;
+    const rad = (zone.angle * Math.PI) / 180;
+    const cosA = Math.cos(rad);
+    const sinA = Math.sin(rad);
+    const rx = (dx * cosA) + (dy * sinA);
+    const ry = (-dx * sinA) + (dy * cosA);
+    const normalized = ((rx * rx) / (zone.rx * zone.rx)) + ((ry * ry) / (zone.ry * zone.ry));
+    return normalized <= 1;
+  }
+
+  function annotateRiftState(cities, zones, lockedMetroKeys = new Set()) {
+    for (const city of cities) {
+      const pt = city?._xy;
+      const hit = Array.isArray(zones) ? zones.find((zone) => pointInRiftZone(pt, zone)) : null;
+      const locked = lockedMetroKeys.has(cityKey(city));
+      city._riftZone = hit || (locked ? { id: "metro-lock", intensity: "high" } : null);
+      city._inRift = !!hit || locked;
+    }
+  }
+
+  function renderUpsideDownTerrain(width, height) {
+    gTerrain.selectAll("*").remove();
+    if (!isUpsideDownMode) return [];
+
+    gTerrain
+      .append("rect")
+      .attr("class", "terrain-corruption-haze")
+      .attr("x", 0)
+      .attr("y", 0)
+      .attr("width", width)
+      .attr("height", height);
+
+    gTerrain
+      .append("rect")
+      .attr("class", "terrain-corruption-grain")
+      .attr("x", 0)
+      .attr("y", 0)
+      .attr("width", width)
+      .attr("height", height);
+
+    const veinLayer = gTerrain.append("g").attr("class", "terrain-veins");
+    const veinCount = 9;
+    for (let i = 0; i < veinCount; i += 1) {
+      veinLayer
+        .append("path")
+        .attr("class", `terrain-vein terrain-vein-${(i % 3) + 1}`)
+        .attr("d", buildVeinPath(width, height, i + 1));
+    }
+
+    const built = buildRiftZones(activeCities, projection, width, height);
+    return built;
+  }
+
+  function renderRiftOverlay(width, height, riftZones) {
+    gRifts.selectAll("*").remove();
+    if (!isUpsideDownMode || !Array.isArray(riftZones) || riftZones.length === 0) return;
+
+    const riftLayer = gRifts.append("g").attr("class", "terrain-rifts");
+    riftZones.forEach((zone, idx) => {
+      riftLayer
+        .append("ellipse")
+        .attr("class", `rift-zone ${zone.intensity === "high" ? "is-high" : "is-medium"}`)
+        .attr("cx", zone.cx)
+        .attr("cy", zone.cy)
+        .attr("rx", zone.rx * 1.03)
+        .attr("ry", zone.ry * 1.03)
+        .attr("transform", `rotate(${zone.angle} ${zone.cx} ${zone.cy})`)
+        .style("animation-delay", `${idx * 0.9}s`);
+
+      riftLayer
+        .append("ellipse")
+        .attr("class", `rift-core ${zone.intensity === "high" ? "is-high" : "is-medium"}`)
+        .attr("cx", zone.cx)
+        .attr("cy", zone.cy)
+        .attr("rx", zone.rx * 0.56)
+        .attr("ry", zone.ry * 0.4)
+        .attr("transform", `rotate(${zone.angle - 8} ${zone.cx} ${zone.cy})`)
+        .style("animation-delay", `${idx * 1.2}s`);
+    });
+
+    const boltA = `M ${width * 0.09} ${height * 0.24} C ${width * 0.24} ${height * 0.14}, ${width * 0.52} ${height * 0.56}, ${width * 0.84} ${height * 0.34}`;
+    const boltB = `M ${width * 0.16} ${height * 0.66} C ${width * 0.34} ${height * 0.54}, ${width * 0.62} ${height * 0.78}, ${width * 0.9} ${height * 0.58}`;
+    riftLayer.append("path").attr("class", "rift-lightning").attr("d", boltA);
+    riftLayer.append("path").attr("class", "rift-lightning is-secondary").attr("d", boltB);
+  }
+
   function render(us) {
     const node = document.getElementById("map");
     const width = Math.max(320, node.clientWidth); const height = Math.max(420, node.clientHeight);
@@ -2127,11 +2287,15 @@ function startApp(){
     projection = d3.geoAlbersUsa().fitSize([width, height], states);
     path = d3.geoPath(projection);
 
-    gLand.selectAll("*").remove(); gSurface.selectAll("*").remove(); gBorders.selectAll("*").remove();
+    gLand.selectAll("*").remove(); gTerrain.selectAll("*").remove(); gSurface.selectAll("*").remove(); gBorders.selectAll("*").remove(); gRifts.selectAll("*").remove();
     gLand.selectAll("path.state-fill").data(states.features).join("path").attr("class", "state-fill").attr("d", path);
     landClipPath.datum(nationFeature).attr("d", path);
+    const riftBuild = renderUpsideDownTerrain(width, height) || { zones: [], lockedMetroKeys: new Set() };
+    const riftZones = Array.isArray(riftBuild?.zones) ? riftBuild.zones : [];
+    const lockedMetroKeys = riftBuild?.lockedMetroKeys instanceof Set ? riftBuild.lockedMetroKeys : new Set();
     gBorders.append("path").datum(stateBorders).attr("class", "state-borders").attr("d", path);
     gBorders.append("path").datum(nationOutline).attr("class", "nation-outline").attr("d", path);
+    renderRiftOverlay(width, height, riftZones);
 
     const citySel = gCities.selectAll("g.city").data(activeCities, d => `${d.city}-${d.state}`).join(enter => {
         const g = enter.append("g").attr("class", "city");
@@ -2199,6 +2363,9 @@ function startApp(){
       const p = projection([d.lon, d.lat]); d._xy = p || null;
       if (!p) return "translate(-999,-999)"; return `translate(${p[0]},${p[1]})`;
     });
+
+    annotateRiftState(activeCities, riftZones, lockedMetroKeys);
+    citySel.classed("in-rift", (d) => !!d._inRift);
 
     citySel.select("circle.particle-ash-a").style("animation-delay", (_, i) => `${(i % 9) * 0.26}s`);
     citySel.select("circle.particle-ash-b").style("animation-delay", (_, i) => `${(i % 7) * 0.31}s`);
