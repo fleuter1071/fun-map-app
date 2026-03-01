@@ -4,7 +4,10 @@ const { Pool } = require("pg");
 
 const app = express();
 const PORT = process.env.PORT || 8010;
+const NODE_ENV = process.env.NODE_ENV || "development";
 const DATABASE_URL = process.env.DATABASE_URL || "";
+const SQLITE_DB_PATH = path.join(__dirname, "database.sqlite");
+const USE_SQLITE_LOCAL = NODE_ENV === "development";
 const CLIMATE_WINDOW_YEARS = 5;
 const CLIMATE_STALE_MS = 7 * 24 * 60 * 60 * 1000;
 const CLIMATE_FETCH_TIMEOUT_MS = 25000;
@@ -22,10 +25,18 @@ function shouldUseSsl(connectionString) {
   return !(lower.includes("localhost") || lower.includes("127.0.0.1"));
 }
 
-const pool = new Pool({
-  connectionString: DATABASE_URL,
-  ssl: shouldUseSsl(DATABASE_URL) ? { rejectUnauthorized: false } : false
-});
+let pool = null;
+let sqliteDb = null;
+
+if (USE_SQLITE_LOCAL) {
+  const sqlite3 = require("sqlite3").verbose();
+  sqliteDb = new sqlite3.Database(SQLITE_DB_PATH);
+} else {
+  pool = new Pool({
+    connectionString: DATABASE_URL,
+    ssl: shouldUseSsl(DATABASE_URL) ? { rejectUnauthorized: false } : false
+  });
+}
 
 app.use(express.json({ limit: "64kb" }));
 app.use(express.static(__dirname));
@@ -114,16 +125,39 @@ function toPgPlaceholders(sql) {
 }
 
 async function dbAll(sql, params = []) {
+  if (USE_SQLITE_LOCAL) {
+    return new Promise((resolve, reject) => {
+      sqliteDb.all(sql, params, (err, rows) => (err ? reject(err) : resolve(rows || [])));
+    });
+  }
   const res = await pool.query(toPgPlaceholders(sql), params);
   return res.rows || [];
 }
 
 async function dbGet(sql, params = []) {
+  if (USE_SQLITE_LOCAL) {
+    return new Promise((resolve, reject) => {
+      sqliteDb.get(sql, params, (err, row) => (err ? reject(err) : resolve(row || null)));
+    });
+  }
   const rows = await dbAll(sql, params);
   return rows[0] || null;
 }
 
 async function dbRun(sql, params = []) {
+  if (USE_SQLITE_LOCAL) {
+    return new Promise((resolve, reject) => {
+      sqliteDb.run(sql, params, function onRun(err) {
+        if (err) reject(err);
+        else {
+          resolve({
+            rowCount: Number(this.changes || 0),
+            lastID: Number(this.lastID || 0)
+          });
+        }
+      });
+    });
+  }
   const res = await pool.query(toPgPlaceholders(sql), params);
   return {
     rowCount: Number(res.rowCount || 0),
@@ -132,6 +166,44 @@ async function dbRun(sql, params = []) {
 }
 
 async function initDatabase() {
+  if (USE_SQLITE_LOCAL) {
+    await dbRun(`
+      CREATE TABLE IF NOT EXISTS memories (
+        id INTEGER PRIMARY KEY,
+        city_key TEXT NOT NULL,
+        memory_date TEXT NOT NULL,
+        note TEXT NOT NULL
+      )
+    `);
+    await dbRun(`
+      CREATE TABLE IF NOT EXISTS city_climate_extremes (
+        city_key TEXT NOT NULL,
+        window_years INTEGER NOT NULL,
+        window_start TEXT NOT NULL,
+        window_end TEXT NOT NULL,
+        coldest_date TEXT,
+        coldest_low_f REAL,
+        source TEXT NOT NULL,
+        computed_at TEXT NOT NULL,
+        PRIMARY KEY (city_key, window_years)
+      )
+    `);
+    await dbRun(`
+      CREATE TABLE IF NOT EXISTS custom_cities (
+        id INTEGER PRIMARY KEY,
+        city TEXT NOT NULL,
+        city_norm TEXT NOT NULL,
+        state TEXT NOT NULL,
+        lat REAL NOT NULL,
+        lon REAL NOT NULL,
+        pop INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(city_norm, state)
+      )
+    `);
+    return;
+  }
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS memories (
       id BIGSERIAL PRIMARY KEY,
@@ -425,6 +497,19 @@ app.post("/api/memories", async (req, res) => {
   }
 
   try {
+    if (USE_SQLITE_LOCAL) {
+      const inserted = await dbRun(
+        `INSERT INTO memories(city_key, memory_date, note) VALUES (?, ?, ?)`,
+        [city_key, memory_date, note]
+      );
+      const row = await dbGet(
+        `SELECT id, city_key, memory_date, note FROM memories WHERE id = ?`,
+        [inserted.lastID]
+      );
+      res.status(201).json(row);
+      return;
+    }
+
     const row = await dbGet(
       `INSERT INTO memories(city_key, memory_date, note)
        VALUES (?, ?, ?)
@@ -510,17 +595,25 @@ app.post("/api/cities", async (req, res) => {
       return;
     }
 
-    const inserted = await dbGet(
-      `INSERT INTO custom_cities (city, city_norm, state, lat, lon, pop)
-       VALUES (?, ?, ?, ?, ?, ?)
-       RETURNING id`,
-      [city.city, city.city_norm, city.state, lat, lon, Math.max(0, Math.round(pop))]
-    );
+    const inserted = USE_SQLITE_LOCAL
+      ? await dbRun(
+        `INSERT INTO custom_cities (city, city_norm, state, lat, lon, pop)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [city.city, city.city_norm, city.state, lat, lon, Math.max(0, Math.round(pop))]
+      )
+      : await dbGet(
+        `INSERT INTO custom_cities (city, city_norm, state, lat, lon, pop)
+         VALUES (?, ?, ?, ?, ?, ?)
+         RETURNING id`,
+        [city.city, city.city_norm, city.state, lat, lon, Math.max(0, Math.round(pop))]
+      );
+
+    const insertedId = USE_SQLITE_LOCAL ? inserted.lastID : inserted.id;
     const saved = await dbGet(
       `SELECT id, city, state, lat, lon, pop, created_at
        FROM custom_cities
        WHERE id = ?`,
-      [inserted.id]
+      [insertedId]
     );
 
     precomputeColdestDays(CLIMATE_WINDOW_YEARS, false).catch((err) => {
@@ -581,14 +674,15 @@ app.get("*", (_req, res) => {
 });
 
 async function startServer() {
-  if (!DATABASE_URL) {
+  if (!USE_SQLITE_LOCAL && !DATABASE_URL) {
     throw new Error("DATABASE_URL is required. Set your Supabase Postgres connection string.");
   }
 
   await initDatabase();
 
   app.listen(PORT, () => {
-    console.log(`Memory Map server running at http://127.0.0.1:${PORT}`);
+    const dbMode = USE_SQLITE_LOCAL ? `sqlite (${SQLITE_DB_PATH})` : "postgres";
+    console.log(`Memory Map server running at http://127.0.0.1:${PORT} [${NODE_ENV}] [db=${dbMode}]`);
     precomputeColdestDays(CLIMATE_WINDOW_YEARS, false).catch((err) => {
       console.error("initial coldest precompute failed:", err?.message || err);
     });
