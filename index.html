@@ -11,10 +11,6 @@
     <div class="headerLeft title">
       <div class="titleRow">
         <h1>US Weather Map - Top 50 Cities (Time-Lapse & Emojis)</h1>
-        <details class="metaInfo">
-          <summary aria-label="About this app">i</summary>
-          <div class="metaPanel">Modular files (HTML/CSS/JS). Fetches free forecasts from Open-Meteo, WAQI & US Census.</div>
-        </details>
       </div>
       <div class="sub">Weather + AQI + census insights for top US cities.</div>
     </div>
@@ -32,9 +28,11 @@
     </div>
 
     <div class="headerRight actions">
-      <button id="refreshBtn" title="Re-fetch weather data">Refresh</button>
-      <button id="addCityBtn" title="Add a city to the map">+ Add City</button>
-      <button id="logMemoryBtn" title="Log a memory for a city">+ Log Memory</button>
+      <div class="actionGroup actionGroupMain">
+        <button id="refreshBtn" class="btnAction btnSecondary" title="Re-fetch weather data">Refresh</button>
+        <button id="addCityBtn" class="btnAction btnPrimary" title="Add a city to the map">+ Add City</button>
+        <button id="logMemoryBtn" class="btnAction btnSecondary" title="Log a memory for a city">Log Memory</button>
+      </div>
 
       <details class="actionMenu">
         <summary>Customize</summary>
@@ -152,19 +150,21 @@
         </div>
         <div id="pinnedList"></div>
       </div>
-      <div id="status">
-        <span class="dot"></span>
-        <span id="statusText">Loading map...</span>
-        <div class="progressTrack" id="progressTrack" aria-hidden="true">
-          <div class="progressFill" id="progressFill"></div>
+      <div id="mapHud" class="mapHudFooter" aria-live="polite">
+        <div id="status">
+          <span class="dot"></span>
+          <span id="statusText">Loading map...</span>
+          <div class="progressTrack" id="progressTrack" aria-hidden="true">
+            <div class="progressFill" id="progressFill"></div>
+          </div>
         </div>
-      </div>
-      <div id="legend" style="display:none;">
-        <span class="tag" id="legendTag">Now</span>
-        <div class="minmax">
-          <span id="legendMin"></span>
-          <div class="bar" id="legendBar"></div>
-          <span id="legendMax"></span>
+        <div id="legend" style="display:none;">
+          <span class="tag" id="legendTag">Now</span>
+          <div class="minmax">
+            <span id="legendMin"></span>
+            <div class="bar" id="legendBar"></div>
+            <span id="legendMax"></span>
+          </div>
         </div>
       </div>
     </div>

@@ -5,6 +5,12 @@ const progressFillEl = document.getElementById('progressFill');
 const LOADING_COLOR = "rgba(148,163,184,0.35)";
 const ERROR_COLOR = "rgba(100,116,139,0.85)";
 
+// Clustering configuration. Adjust radiusPx to tune collision avoidance aggressiveness.
+const CLUSTER_CONFIG = {
+  radiusPx: 16,
+  minPoints: 2
+};
+
 function setProgress(done, total, failed = 0){
   if(!progressTrackEl || !progressFillEl) return;
   const pct = total ? Math.max(0, Math.min(1, done / total)) : 0;
@@ -63,6 +69,96 @@ async function start(){
   }
 }
 function startApp(){
+  const CLUSTER_DOT_RADIUS = 12;
+  let clusterState = {
+    zoomK: 1,
+    clusters: [],
+    cityToCluster: new Map()
+  };
+
+  function getWeatherIconType(code) {
+    const c = Number(code);
+    if (!Number.isFinite(c)) return "cloud";
+    if (c === 0 || c === 1) return "sun";
+    if (c === 2 || c === 3) return "cloud";
+    if (c === 45 || c === 48) return "fog";
+    if ([51,53,55,56,57,61,63,65,66,67,80,81,82].includes(c)) return "rain";
+    if ([71,73,75,77,85,86].includes(c)) return "snow";
+    if ([95,96,99].includes(c)) return "storm";
+    return "cloud";
+  }
+
+  function appendWeatherIconGlyph(parent, extraClass = "") {
+    const icon = parent.append("g")
+      .attr("class", `weather-icon ${extraClass}`.trim())
+      .attr("transform", "translate(6,-8)")
+      .style("pointer-events", "none");
+
+    icon.append("path")
+      .attr("class", "weather-icon-cloud")
+      .attr("d", "M-5,2 C-6,-2 -2,-5 2,-4 C4,-7 10,-6 11,-1 C14,-1 15,4 11,5 H-4 C-7,5 -8,3 -5,2 Z");
+
+    icon.append("circle")
+      .attr("class", "weather-icon-sun-core")
+      .attr("cx", 3.5)
+      .attr("cy", -1.2)
+      .attr("r", 2.8);
+
+    const rays = icon.append("g").attr("class", "weather-icon-sun-rays");
+    const rayAngles = [0, 45, 90, 135, 180, 225, 270, 315];
+    rayAngles.forEach((deg) => {
+      const rad = (deg * Math.PI) / 180;
+      const x1 = 3.5 + Math.cos(rad) * 4.1;
+      const y1 = -1.2 + Math.sin(rad) * 4.1;
+      const x2 = 3.5 + Math.cos(rad) * 5.7;
+      const y2 = -1.2 + Math.sin(rad) * 5.7;
+      rays.append("line")
+        .attr("x1", x1)
+        .attr("y1", y1)
+        .attr("x2", x2)
+        .attr("y2", y2);
+    });
+
+    const rain = icon.append("g").attr("class", "weather-icon-rain");
+    rain.append("line").attr("x1", -1).attr("y1", 6).attr("x2", -2.3).attr("y2", 8.6);
+    rain.append("line").attr("x1", 2).attr("y1", 6.2).attr("x2", 0.7).attr("y2", 8.8);
+    rain.append("line").attr("x1", 5).attr("y1", 6).attr("x2", 3.7).attr("y2", 8.6);
+
+    const snow = icon.append("g").attr("class", "weather-icon-snow");
+    [-1.8, 3.2].forEach((x) => {
+      snow.append("line").attr("x1", x - 0.8).attr("y1", 7.2).attr("x2", x + 0.8).attr("y2", 7.2);
+      snow.append("line").attr("x1", x).attr("y1", 6.4).attr("x2", x).attr("y2", 8.0);
+    });
+
+    icon.append("path")
+      .attr("class", "weather-icon-bolt")
+      .attr("d", "M4,4 L1,8 H3 L1,11 L6,6 H4 Z");
+
+    const fog = icon.append("g").attr("class", "weather-icon-fog");
+    fog.append("line").attr("x1", -3.5).attr("y1", 7).attr("x2", 9.5).attr("y2", 7);
+    fog.append("line").attr("x1", -2.5).attr("y1", 9).attr("x2", 8.5).attr("y2", 9);
+
+    return icon;
+  }
+
+  function updateWeatherIconsForSelection(selection, cityAccessor = (d) => d) {
+    selection.each(function (d) {
+      const city = cityAccessor(d);
+      const icon = d3.select(this).select("g.weather-icon");
+      if (icon.empty()) return;
+      const wx = city?._wx;
+      const code = wx?.hourly?.code?.[selectedHourIndex];
+      const type = (wx && !city?._wxError) ? getWeatherIconType(code) : null;
+      icon.style("display", type ? null : "none");
+      icon.select(".weather-icon-sun-core").style("display", type === "sun" ? null : "none");
+      icon.select(".weather-icon-sun-rays").style("display", type === "sun" ? null : "none");
+      icon.select(".weather-icon-cloud").style("display", ["cloud", "rain", "snow", "storm", "fog"].includes(type) ? null : "none");
+      icon.select(".weather-icon-rain").style("display", type === "rain" ? null : "none");
+      icon.select(".weather-icon-snow").style("display", type === "snow" ? null : "none");
+      icon.select(".weather-icon-bolt").style("display", type === "storm" ? null : "none");
+      icon.select(".weather-icon-fog").style("display", type === "fog" ? null : "none");
+    });
+  }
 
   async function fetchJsonWithTimeout(url, timeoutMs=12000){
     const controller = new AbortController();
@@ -246,28 +342,6 @@ function startApp(){
   let userLocation = null;
   const USER_LOCATION_KEY = "userLocation:v1";
   let userLocationTagTimer = null;
-
-  // Emoji Logic
-  function getWeatherEmoji(code, temp) {
-    if (isUpsideDownMode) {
-      if (temp > 60) return "🧇";
-      if (temp >= 40) return "🦇";
-      return "👾";
-    }
-    if (temp > 95) return "🥵";
-    if (temp > 85) return "🍦";
-    if (temp < 25) return "🧊";
-    if (temp < 33) return "🧤";
-    const c = Number(code);
-    if (c === 0) return "☀️";
-    if (c <= 2) return "🌤️";
-    if (c === 3) return "☁️";
-    if (c === 45 || c === 48) return "🌫️";
-    if ([51,53,55,56,57,61,63,65,66,67,80,81,82].includes(c)) return "☔";
-    if ([71,73,75,77,85,86].includes(c)) return "❄️";
-    if ([95,96,99].includes(c)) return "⛈️";
-    return "🌡️";
-  }
 
   // AQI Color mapping
   function getAQIColor(aqi) {
@@ -1126,6 +1200,7 @@ function startApp(){
   const gBorders = gRoot.append("g").attr("class", "borders");
   const gRifts = gRoot.append("g").attr("class", "rift-overlay").attr("clip-path", "url(#land-clip)");
   const gCities = gRoot.append("g").attr("class", "cities");
+  const gClusters = gRoot.append("g").attr("class", "clusters");
   const gUserLocation = gRoot.append("g").attr("class", "user-location-layer");
 
   let projection = d3.geoAlbersUsa();
@@ -1780,6 +1855,114 @@ function startApp(){
     gCities.selectAll("g.city").classed("pin-disabled", disablePins);
     gCities.selectAll("g.city").classed("pinned", isPinned);
     gCities.selectAll("g.city circle.city-dot").attr("r", d => isPinned(d) ? 6.3 : 4.85).style("stroke-width", d => isPinned(d) ? 2.2 : 0.8).style("stroke", d => isPinned(d) ? "rgba(255,255,255,0.9)" : "rgba(0,0,0,0.35)");
+    updateClusterLayout(lastZoomTransform?.k || 1);
+  }
+
+  function buildCityClusters(zoomK = 1) {
+    const radiusPx = Number(CLUSTER_CONFIG.radiusPx) || 28;
+    const radiusWorld = radiusPx / Math.max(1, Number(zoomK) || 1);
+    const cityToCluster = new Map();
+    const visibleCities = activeCities.filter((d) => {
+      const key = cityKey(d);
+      return Array.isArray(d?._xy) && !pinned.has(key);
+    });
+    const qt = d3.quadtree()
+      .x((d) => d._xy[0])
+      .y((d) => d._xy[1])
+      .addAll(visibleCities);
+
+    const visited = new Set();
+    const clusters = [];
+
+    for (const seed of visibleCities) {
+      const seedKey = cityKey(seed);
+      if (visited.has(seedKey)) continue;
+      const queue = [seed];
+      const members = [];
+      visited.add(seedKey);
+
+      while (queue.length) {
+        const current = queue.pop();
+        members.push(current);
+        const [cx, cy] = current._xy;
+        qt.visit((node, x0, y0, x1, y1) => {
+          if (x0 > cx + radiusWorld || x1 < cx - radiusWorld || y0 > cy + radiusWorld || y1 < cy - radiusWorld) return true;
+          if (!node.length) {
+            let q = node;
+            while (q) {
+              const candidate = q.data;
+              const candidateKey = cityKey(candidate);
+              if (!visited.has(candidateKey)) {
+                const dx = candidate._xy[0] - cx;
+                const dy = candidate._xy[1] - cy;
+                if ((dx * dx) + (dy * dy) <= radiusWorld * radiusWorld) {
+                  visited.add(candidateKey);
+                  queue.push(candidate);
+                }
+              }
+              q = q.next;
+            }
+          }
+          return false;
+        });
+      }
+
+      if (members.length >= (Number(CLUSTER_CONFIG.minPoints) || 2)) {
+        const totalPop = members.reduce((sum, c) => sum + Math.max(1, Number(c.pop) || 1), 0);
+        const cx = members.reduce((sum, c) => sum + (c._xy[0] * Math.max(1, Number(c.pop) || 1)), 0) / totalPop;
+        const cy = members.reduce((sum, c) => sum + (c._xy[1] * Math.max(1, Number(c.pop) || 1)), 0) / totalPop;
+        const representative = members.reduce((best, c) => (Number(c.pop) > Number(best.pop) ? c : best), members[0]);
+        const keys = members.map((c) => cityKey(c)).sort();
+        const id = `cluster:${keys.join("|")}`;
+        const cluster = { id, members, count: members.length, cx, cy, representative };
+        clusters.push(cluster);
+        for (const m of members) cityToCluster.set(cityKey(m), cluster);
+      }
+    }
+
+    return { clusters, cityToCluster };
+  }
+
+  function updateClusterLayout(zoomK = 1) {
+    if (!gCities || !gClusters) return;
+    clusterState.zoomK = zoomK;
+    const built = buildCityClusters(zoomK);
+    clusterState.clusters = built.clusters;
+    clusterState.cityToCluster = built.cityToCluster;
+
+    const clusterSel = gClusters.selectAll("g.cluster")
+      .data(clusterState.clusters, (d) => d.id)
+      .join(
+        (enter) => {
+          const g = enter.append("g").attr("class", "cluster");
+          g.append("circle").attr("class", "cluster-hit").attr("r", 18);
+          g.append("circle").attr("class", "cluster-dot").attr("r", CLUSTER_DOT_RADIUS);
+          appendWeatherIconGlyph(g, "cluster-weather-icon").attr("transform", "translate(-2,-7) scale(0.9)");
+          g.append("text").attr("class", "cluster-count").attr("dy", 4).attr("text-anchor", "middle");
+          g.on("click", (event, d) => {
+            event.stopPropagation();
+            if (!zoom) return;
+            const width = mapWidth || 960;
+            const height = mapHeight || 600;
+            const nextK = Math.min(8, Math.max((lastZoomTransform?.k || 1) * 1.8, 2));
+            const t = d3.zoomIdentity.translate((width / 2) - (d.cx * nextK), (height / 2) - (d.cy * nextK)).scale(nextK);
+            svg.transition().duration(280).call(zoom.transform, t);
+          });
+          return g;
+        },
+        (update) => update,
+        (exit) => exit.remove()
+      );
+
+    clusterSel.attr("transform", (d) => `translate(${d.cx},${d.cy})`);
+    clusterSel.select("text.cluster-count").text((d) => d.count);
+    updateWeatherIconsForSelection(clusterSel, (d) => d.representative);
+
+    gCities.selectAll("g.city")
+      .classed("is-clustered", (d) => clusterState.cityToCluster.has(cityKey(d)))
+      .style("display", (d) => clusterState.cityToCluster.has(cityKey(d)) ? "none" : null);
+
+    if (_hoverCityKey && clusterState.cityToCluster.has(_hoverCityKey)) hideTooltip();
   }
 
   function togglePin(d){
@@ -1868,15 +2051,9 @@ function startApp(){
       return ERROR_COLOR;
     };
     circles.style("fill", fillFor);
-
-    // Apply Live Emojis
-    gCities.selectAll("g.city text.city-emoji").text(d => {
-      if (!d._wx || d._wxError) return "";
-      const code = d._wx.hourly.code?.[selectedHourIndex];
-      const temp = d._wx.hourly.temp?.[selectedHourIndex];
-      if (code == null || temp == null) return "";
-      return getWeatherEmoji(code, temp);
-    });
+    gClusters.selectAll("g.cluster circle.cluster-dot").style("fill", (d) => fillFor(d.representative));
+    updateWeatherIconsForSelection(gCities.selectAll("g.city"), (d) => d);
+    updateWeatherIconsForSelection(gClusters.selectAll("g.cluster"), (d) => d.representative);
 
     updateWeatherFX();
     updateSurfaceOverlay(!!animated);
@@ -1976,7 +2153,7 @@ function startApp(){
 
   function initZoom(width, height) {
     zoom = d3.zoom().scaleExtent([1, 8]).translateExtent([[0, 0], [width, height]]).extent([[0, 0], [width, height]])
-      .on("zoom", (event) => { lastZoomTransform = event.transform; gRoot.attr("transform", event.transform); })
+      .on("zoom", (event) => { lastZoomTransform = event.transform; gRoot.attr("transform", event.transform); updateClusterLayout(event.transform.k); })
       .on("end", () => { lastZoomTransform = d3.zoomTransform(svg.node()); schedulePermalinkUpdate(); });
     svg.call(zoom);
     applyPendingZoomIfAny();
@@ -2326,8 +2503,7 @@ function startApp(){
             }
             openMemoryJournal(key);
           });
-        // Add text element for Live Emoji
-        g.append("text").attr("class", "city-emoji").attr("dx", 5).attr("dy", -8);
+        appendWeatherIconGlyph(g, "city-weather-icon");
 
         g.on("mouseenter", (event, d) => { if(isTouchContext(event)) return; animateHoverRing(d); showTooltip(event, d); })
          .on("mousemove", (event) => { if(isTouchContext(event)) return; moveTooltip(event); })
@@ -2373,6 +2549,7 @@ function startApp(){
 
     updateMemoryStars();
     updateUserLocationMarker();
+    updateClusterLayout(lastZoomTransform?.k || 1);
     applyDotColors(false); updatePinnedStyles(); initZoom(width, height);
   }
 
