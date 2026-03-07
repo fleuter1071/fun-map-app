@@ -18,9 +18,13 @@
     <div class="headerCenter">
       <div class="dayControl" title="Scrub through the next 72 hours">
         <button id="playBtn" aria-label="Play timeline">▶</button>
-        <span class="dayEdge">Now</span>
+        <span class="dayStateChip" id="timelineStateChip" data-state="live" aria-live="polite">
+          <span class="dayStateDot" aria-hidden="true"></span>
+          <span id="timelineStateText">LIVE</span>
+        </span>
         <span class="dayLabel" id="dayLabel">Now</span>
         <input id="daySlider" type="range" min="0" max="71" step="1" value="0" aria-label="Select hour" />
+        <button id="returnLiveBtn" class="dayLiveBtn" type="button" hidden>Return to Live</button>
         <span class="dayEdge">+72h</span>
         <span class="modeInfoChip" id="modeInfoChip" hidden>Coldest Mode</span>
       </div>
@@ -70,6 +74,7 @@
                 <input type="date" id="historicalDateInput" aria-label="Historical start date" />
               </div>
             </div>
+            <div class="modeHelp tmNotice" id="timeMachineNotice" hidden></div>
             <label class="toggle tmToggle" title="Enable The Upside Down protocol">
               <input type="checkbox" id="upsideDownToggle" />
               <span>The Upside Down</span>
@@ -159,7 +164,7 @@
           </div>
         </div>
         <div id="legend" style="display:none;">
-          <span class="tag" id="legendTag">Now</span>
+          <span class="tag" id="legendTag">Live</span>
           <div class="minmax">
             <span id="legendMin"></span>
             <div class="bar" id="legendBar"></div>

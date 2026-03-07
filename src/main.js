@@ -252,8 +252,11 @@ function startApp(){
   const WEATHER_FRESH_MS = 60 * 60 * 1000;
   const WEATHER_STALE_MS = 24 * 60 * 60 * 1000;
   const WEATHER_FETCH_TIMEOUT_MS = 4000;
+  const WEATHER_FETCH_TIMEOUT_HIST_MS = 12000;
+  const WEATHER_FETCH_RETRIES_HIST = 2;
   const CONCURRENCY = 8;
-  const CACHE_VERSION = 5;
+  const CONCURRENCY_HIST = 3;
+  const CACHE_VERSION = 6;
 
   const tooltipEl = document.getElementById('tooltip');
 
@@ -287,12 +290,16 @@ function startApp(){
 
   const daySlider = document.getElementById('daySlider');
   const dayLabelEl = document.getElementById('dayLabel');
+  const timelineStateChipEl = document.getElementById("timelineStateChip");
+  const timelineStateTextEl = document.getElementById("timelineStateText");
+  const returnLiveBtn = document.getElementById("returnLiveBtn");
   const colorModeSelect = document.getElementById("colorModeSelect");
   const surfaceToggle = document.getElementById("surfaceToggle");
   const sportsFilterToggle = document.getElementById("sportsFilterToggle");
   const timeMachineToggle = document.getElementById("timeMachineToggle");
   const tmDateWrap = document.getElementById("tmDateWrap");
   const historicalDateInput = document.getElementById("historicalDateInput");
+  const timeMachineNotice = document.getElementById("timeMachineNotice");
   const spookyThemeToggle = document.getElementById("spookyThemeToggle");
   const upsideDownToggle = document.getElementById("upsideDownToggle");
   const addCityBtn = document.getElementById("addCityBtn");
@@ -339,6 +346,8 @@ function startApp(){
   let coldestMeta = { stale: false, computing: false };
   let coldestPollTimer = null;
   let isSubmittingAddCity = false;
+  const TIME_MACHINE_LOCK_KEY = "uswx:tm:lockedUntil:v1";
+  const TIME_MACHINE_LOCKED_REASON = "Time Machine reached the weather provider daily limit and is temporarily unavailable until tomorrow.";
   let userLocation = null;
   const USER_LOCATION_KEY = "userLocation:v1";
   let userLocationTagTimer = null;
@@ -884,6 +893,11 @@ function startApp(){
   }
 
   async function jumpToMemoryDate(memory){
+    if(isTimeMachineLocked()){
+      const until = getTimeMachineLockedUntil();
+      setStatus(`${TIME_MACHINE_LOCKED_REASON} Available again around ${formatLockUntil(until)}.`);
+      return;
+    }
     if(!memory || !memory.memory_date) return;
     if (isPlaying) { isPlaying = false; if(playBtn) playBtn.textContent = "▶️"; clearInterval(playInterval); }
     isHistoricalMode = true;
@@ -935,6 +949,60 @@ function startApp(){
     historicalDateInput.value = historicalStartDate;
   }
 
+  function getTimeMachineLockedUntil(){
+    try {
+      const raw = localStorage.getItem(TIME_MACHINE_LOCK_KEY);
+      const v = raw ? Number(raw) : 0;
+      if(!Number.isFinite(v) || v <= 0) return 0;
+      if(Date.now() >= v){
+        localStorage.removeItem(TIME_MACHINE_LOCK_KEY);
+        return 0;
+      }
+      return v;
+    } catch {
+      return 0;
+    }
+  }
+
+  function lockTimeMachineUntilTomorrow(){
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    d.setHours(0, 5, 0, 0);
+    const ts = d.getTime();
+    try { localStorage.setItem(TIME_MACHINE_LOCK_KEY, String(ts)); } catch {}
+    return ts;
+  }
+
+  function formatLockUntil(ts){
+    if(!Number.isFinite(ts) || ts <= 0) return "tomorrow";
+    return new Date(ts).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" });
+  }
+
+  function isTimeMachineLocked(){
+    return getTimeMachineLockedUntil() > 0;
+  }
+
+  function applyTimeMachineAvailability(){
+    const lockedUntil = getTimeMachineLockedUntil();
+    const locked = lockedUntil > 0;
+    if(timeMachineNotice){
+      timeMachineNotice.hidden = !locked;
+      timeMachineNotice.textContent = locked
+        ? `${TIME_MACHINE_LOCKED_REASON} (Available again around ${formatLockUntil(lockedUntil)}.)`
+        : "";
+    }
+    if(locked){
+      isHistoricalMode = false;
+      if(timeMachineToggle){
+        timeMachineToggle.checked = false;
+        timeMachineToggle.disabled = true;
+      }
+      if(tmDateWrap) tmDateWrap.hidden = true;
+    } else if(timeMachineToggle){
+      timeMachineToggle.disabled = false;
+    }
+  }
+
   function applyThemeAttribute(){
     if(isUpsideDownMode){
       document.body.setAttribute("data-theme", "upside-down");
@@ -957,6 +1025,14 @@ function startApp(){
   }
 
   async function setHistoricalMode(nextMode){
+    if(nextMode && isTimeMachineLocked()){
+      isHistoricalMode = false;
+      if(timeMachineToggle) timeMachineToggle.checked = false;
+      if(tmDateWrap) tmDateWrap.hidden = true;
+      const until = getTimeMachineLockedUntil();
+      setStatus(`${TIME_MACHINE_LOCKED_REASON} Available again around ${formatLockUntil(until)}.`);
+      return;
+    }
     isHistoricalMode = !!nextMode;
     if(!isHistoricalMode) activeMemoryId = null;
     if(tmDateWrap) tmDateWrap.hidden = !isHistoricalMode;
@@ -1015,8 +1091,9 @@ function startApp(){
 
     // Upside Down is a visual/UX mode; do not force historical weather.
     if(timeMachineToggle){
-      timeMachineToggle.disabled = false;
-      timeMachineToggle.checked = !!isHistoricalMode;
+      const locked = isTimeMachineLocked();
+      timeMachineToggle.disabled = locked;
+      timeMachineToggle.checked = locked ? false : !!isHistoricalMode;
     }
     if(tmDateWrap){
       tmDateWrap.hidden = !isHistoricalMode;
@@ -1079,6 +1156,12 @@ function startApp(){
 
   if(timeMachineToggle){
     timeMachineToggle.addEventListener("change", async () => {
+      if(isTimeMachineLocked()){
+        timeMachineToggle.checked = false;
+        const until = getTimeMachineLockedUntil();
+        setStatus(`${TIME_MACHINE_LOCKED_REASON} Available again around ${formatLockUntil(until)}.`);
+        return;
+      }
       if (isPlaying) { isPlaying = false; if(playBtn) playBtn.textContent = "▶️"; clearInterval(playInterval); }
       await setHistoricalMode(!!timeMachineToggle.checked);
     });
@@ -1279,8 +1362,32 @@ function startApp(){
     const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
       const res = await fetch(url, { headers: { "Accept": "application/json" }, signal: ctrl.signal });
-      if (!res.ok) throw new Error(`Fetch failed (${res.status})`); return await res.json();
+      if (!res.ok){
+        let detail = "";
+        try { detail = (await res.text()).slice(0, 180); } catch {}
+        throw new Error(`Fetch failed (${res.status})${detail ? `: ${detail}` : ""}`);
+      }
+      return await res.json();
+    } catch (err) {
+      if (err && err.name === "AbortError") {
+        throw new Error(`Fetch timed out (${timeoutMs}ms)`);
+      }
+      throw err;
     } finally { clearTimeout(t); }
+  }
+
+  function isRetryableWeatherError(err){
+    const msg = String(err?.message || "").toLowerCase();
+    return msg.includes("429") || msg.includes("timed out") || msg.includes("network") || msg.includes("failed to fetch");
+  }
+
+  function isProviderDailyLimitError(err){
+    const msg = String(err?.message || "").toLowerCase();
+    return msg.includes("429") && (msg.includes("daily request limit exceeded") || msg.includes("try again tomorrow"));
+  }
+
+  function sleep(ms){
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   async function fetchWeatherNetwork(city) {
@@ -1293,17 +1400,29 @@ function startApp(){
         `&hourly=temperature_2m,precipitation,weather_code,wind_speed_10m,wind_direction_10m` +
         `&daily=temperature_2m_max,temperature_2m_min,precipitation_sum` +
         `&start_date=${historicalStartDate}&end_date=${endDate}` +
-        `&timezone=auto&temperature_unit=fahrenheit&wind_speed_unit=mph`;
+        `&timezone=UTC&temperature_unit=fahrenheit&wind_speed_unit=mph`;
     } else {
       url =
         `https://api.open-meteo.com/v1/forecast?latitude=${city.lat}&longitude=${city.lon}` +
         `&current=temperature_2m,apparent_temperature,relative_humidity_2m,cloud_cover,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m` +
         `&hourly=temperature_2m,precipitation_probability,weather_code,wind_speed_10m,wind_direction_10m` +
-        `&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max` +
-        `&forecast_days=3&timezone=auto&temperature_unit=fahrenheit&wind_speed_unit=mph`;
+        `&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code` +
+        `&forecast_days=3&timezone=UTC&temperature_unit=fahrenheit&wind_speed_unit=mph`;
     }
 
-    const data = await fetchJSONWithTimeout(url, WEATHER_FETCH_TIMEOUT_MS);
+    const timeoutMs = useHistorical ? WEATHER_FETCH_TIMEOUT_HIST_MS : WEATHER_FETCH_TIMEOUT_MS;
+    const retries = useHistorical ? WEATHER_FETCH_RETRIES_HIST : 0;
+    let data = null;
+    for(let attempt = 0; attempt <= retries; attempt++){
+      try {
+        data = await fetchJSONWithTimeout(url, timeoutMs);
+        break;
+      } catch (err) {
+        if(attempt >= retries || !isRetryableWeatherError(err)) throw err;
+        await sleep(350 * (attempt + 1));
+      }
+    }
+    if(!data) throw new Error("No weather payload returned.");
     const cur = data?.current ?? {};
     const hourlyTime = data?.hourly?.time ?? [];
     const hourlyTemp = data?.hourly?.temperature_2m ?? [];
@@ -1342,6 +1461,7 @@ function startApp(){
       precip: useHistorical
         ? [data?.daily?.precipitation_sum?.[0] ?? null, data?.daily?.precipitation_sum?.[1] ?? null, data?.daily?.precipitation_sum?.[2] ?? null]
         : [data?.daily?.precipitation_probability_max?.[0] ?? null, data?.daily?.precipitation_probability_max?.[1] ?? null, data?.daily?.precipitation_probability_max?.[2] ?? null],
+      dailyCode: [data?.daily?.weather_code?.[0] ?? null, data?.daily?.weather_code?.[1] ?? null, data?.daily?.weather_code?.[2] ?? null],
       coldestDay,
       current: {
         time: currentTime, temp: currentTemp, feels: cur?.apparent_temperature ?? currentTemp,
@@ -1387,7 +1507,8 @@ function startApp(){
     setStatus(`Fetching live Air Quality data…`);
     setProgress(0, activeCities.length, 0);
     let done = 0;
-    await asyncPool(CONCURRENCY, activeCities, async (city) => {
+    const poolSize = isHistoricalMode ? CONCURRENCY_HIST : CONCURRENCY;
+    await asyncPool(poolSize, activeCities, async (city) => {
       if (city._aqi === undefined) { try { city._aqi = await fetchAQINetwork(city); } catch(e) { city._aqi = null; } }
       done++; setProgress(done, activeCities.length, 0); computeScaleFromLoaded(true);
     });
@@ -1660,7 +1781,91 @@ function startApp(){
 
   function hideTooltip() { clearHoverState(); tooltipEl.style.display = "none"; }
 
+  function getRoundedCurrentHourDate(){
+    const d = new Date();
+    if(d.getMinutes() >= 30) d.setHours(d.getHours() + 1);
+    d.setMinutes(0, 0, 0);
+    return d;
+  }
+
+  function parseHourlyTimestampMs(value){
+    if(value == null) return NaN;
+    if(typeof value === "number" && isFinite(value)){
+      return value < 1e12 ? value * 1000 : value;
+    }
+    if(typeof value !== "string") return NaN;
+    const raw = value.trim();
+    if(!raw) return NaN;
+    if(/^\d+$/.test(raw)){
+      const n = Number(raw);
+      return n < 1e12 ? n * 1000 : n;
+    }
+    // Weather API hourly strings are canonical UTC for timeline alignment.
+    return Date.parse(raw.endsWith("Z") ? raw : `${raw}Z`);
+  }
+
+  function findTimelineIndexForCurrentHour(hourlyTimes){
+    if(!Array.isArray(hourlyTimes) || hourlyTimes.length === 0) return 0;
+    const target = getRoundedCurrentHourDate().getTime();
+    let bestFutureIdx = -1;
+    let nearestPastIdx = 0;
+    for(let i = 0; i < hourlyTimes.length; i++){
+      const ts = parseHourlyTimestampMs(hourlyTimes[i]);
+      if(!Number.isFinite(ts)) continue;
+      if(ts >= target){
+        bestFutureIdx = i;
+        break;
+      }
+      nearestPastIdx = i;
+    }
+    return bestFutureIdx >= 0 ? bestFutureIdx : nearestPastIdx;
+  }
+
+  function getLiveTimelineIndex(){
+    const sampleCity = activeCities.find(c => c?._wx?.hourly?.time && c._wx.hourly.time.length > 0);
+    if(!sampleCity) return 0;
+    const idx = findTimelineIndexForCurrentHour(sampleCity._wx.hourly.time);
+    return Math.max(0, Math.min(71, idx));
+  }
+
+  function syncTimelineStateUI(){
+    if(!timelineStateChipEl || !timelineStateTextEl) return;
+    if(isHistoricalMode){
+      timelineStateChipEl.dataset.state = "historical";
+      timelineStateTextEl.textContent = "HISTORICAL";
+      if(returnLiveBtn) returnLiveBtn.hidden = true;
+      return;
+    }
+    const liveIdx = getLiveTimelineIndex();
+    const delta = selectedHourIndex - liveIdx;
+    if(delta === 0){
+      timelineStateChipEl.dataset.state = "live";
+      timelineStateTextEl.textContent = "LIVE";
+      if(returnLiveBtn) returnLiveBtn.hidden = true;
+      return;
+    }
+    if(delta > 0){
+      timelineStateChipEl.dataset.state = "ahead";
+      timelineStateTextEl.textContent = "LOOKING AHEAD";
+    } else {
+      timelineStateChipEl.dataset.state = "back";
+      timelineStateTextEl.textContent = "LOOKING BACK";
+    }
+    if(returnLiveBtn) returnLiveBtn.hidden = false;
+  }
+
+  function jumpToLiveHour(){
+    if(isHistoricalMode) return;
+    selectedHourIndex = getLiveTimelineIndex();
+    if(daySlider) daySlider.value = String(selectedHourIndex);
+    updateDayLabelUI();
+    computeScaleFromLoaded(true);
+    renderPinnedPanel();
+    schedulePermalinkUpdate();
+  }
+
   function updateDayLabelUI(){
+    syncTimelineStateUI();
     if(colorMode === "aqi"){
        if(dayLabelEl) dayLabelEl.textContent = "Live AQI";
        if(legendTagEl) legendTagEl.textContent = "Current Conditions";
@@ -1673,8 +1878,11 @@ function startApp(){
     }
     const sampleCity = activeCities.find(c => c._wx && c._wx.hourly && c._wx.hourly.time && c._wx.hourly.time.length > selectedHourIndex);
     if(sampleCity) {
-      const dt = new Date(sampleCity._wx.hourly.time[selectedHourIndex]);
-      const formatted = dt.toLocaleTimeString([], { weekday: 'short', hour: 'numeric' });
+      const ts = parseHourlyTimestampMs(sampleCity._wx.hourly.time[selectedHourIndex]);
+      const dt = Number.isFinite(ts) ? new Date(ts) : null;
+      const formatted = dt
+        ? dt.toLocaleTimeString([], { weekday: "short", hour: "numeric" })
+        : `+${selectedHourIndex}h`;
       if(dayLabelEl) dayLabelEl.textContent = formatted;
       if(legendTagEl) legendTagEl.textContent = `${formatted} ${colorMode === 'precip' ? 'Precip' : 'Temp'}`;
     } else {
@@ -1735,10 +1943,13 @@ function startApp(){
       const hi = wx?.hi?.[i];
       const lo = wx?.lo?.[i];
       const pr = wx?.precip?.[i];
+      const dailyCode = wx?.dailyCode?.[i];
+      const fallbackHourlyCode = wx?.hourly?.code?.[(i * 24) + 12] ?? wx?.hourly?.code?.[i * 24] ?? null;
+      const cond = wxCodeToIconLabel(dailyCode ?? fallbackHourlyCode);
       const h = (hi != null && isFinite(hi)) ? `${Math.round(hi)}°` : "—";
       const l = (lo != null && isFinite(lo)) ? `${Math.round(lo)}°` : "—";
       const p = (pr != null && isFinite(pr)) ? `${Math.round(pr)}%` : "—";
-      return `<div class="pin-forecast-card ${i === currentDayIdx ? "is-current" : ""}"><div class="pin-forecast-day">${formatDOW(ds)}</div><div class="pin-forecast-temp">${h} / ${l}</div><div class="pin-forecast-precip">💧 ${p}</div></div>`;
+      return `<div class="pin-forecast-card ${i === currentDayIdx ? "is-current" : ""}"><div class="pin-forecast-top"><div class="pin-forecast-day">${formatDOW(ds)}</div></div><div class="pin-forecast-temp-row"><div class="pin-forecast-temp">${h} / ${l}</div><div class="pin-forecast-icon" title="${escapeHTML(cond.label)}">${cond.icon}</div></div><div class="pin-forecast-precip"><span class="pin-forecast-precip-chip">💧 ${p}</span></div></div>`;
     }).join("");
     return `<div class="pin-forecast-grid">${cards}</div>`;
   }
@@ -1751,10 +1962,13 @@ function startApp(){
       const hi = wx?.hi?.[i];
       const lo = wx?.lo?.[i];
       const pr = wx?.precip?.[i];
+      const dailyCode = wx?.dailyCode?.[i];
+      const fallbackHourlyCode = wx?.hourly?.code?.[(i * 24) + 12] ?? wx?.hourly?.code?.[i * 24] ?? null;
+      const cond = wxCodeToIconLabel(dailyCode ?? fallbackHourlyCode);
       const h = (hi != null && isFinite(hi)) ? `${Math.round(hi)}°` : "—";
       const l = (lo != null && isFinite(lo)) ? `${Math.round(lo)}°` : "—";
       const p = (pr != null && isFinite(pr)) ? `${Math.round(pr)}%` : "—";
-      return `<div class="tooltip-forecast-card ${i === currentDayIdx ? "is-current" : ""}"><div class="tooltip-forecast-day">${formatDOW(ds)}</div><div class="tooltip-forecast-temp">${h} / ${l}</div><div class="tooltip-forecast-precip">💧 ${p}</div></div>`;
+      return `<div class="tooltip-forecast-card ${i === currentDayIdx ? "is-current" : ""}"><div class="tooltip-forecast-top"><div class="tooltip-forecast-day">${formatDOW(ds)}</div></div><div class="tooltip-forecast-temp-row"><div class="tooltip-forecast-temp">${h} / ${l}</div><div class="tooltip-forecast-icon" title="${escapeHTML(cond.label)}">${cond.icon}</div></div><div class="tooltip-forecast-precip"><span class="tooltip-forecast-precip-chip">💧 ${p}</span></div></div>`;
     }).join("");
     return `<div class="tooltip-forecast-grid">${cards}</div>`;
   }
@@ -2594,6 +2808,9 @@ function startApp(){
   async function loadAllWeather(opts = {}) {
     const force = !!opts.force;
     let done = 0; let failed = 0; let cacheHits = 0; let netOk = 0;
+    const errorSamples = [];
+    let historicalLimitReached = false;
+    let historicalSkipped = 0;
 
     for (const c of activeCities) {
       c._wxError = false; c._pulsed = false;
@@ -2607,8 +2824,22 @@ function startApp(){
     if (cacheHits > 0) { setStatus(`Loaded cached weather for ${cacheHits}/${activeCities.length} cities. Refreshing…`); } 
     else { setStatus(`Fetching weather… (0/${activeCities.length})`); }
 
-    await asyncPool(CONCURRENCY, activeCities, async (city) => {
+    const poolSize = isHistoricalMode ? CONCURRENCY_HIST : CONCURRENCY;
+    await asyncPool(poolSize, activeCities, async (city) => {
       const needsNet = force || shouldRefreshFromNetwork(city);
+      if (isHistoricalMode && historicalLimitReached) {
+        if (!(city._wx && city._wxMeta?.source === "cache")) {
+          city._wx = null;
+          city._wxError = true;
+          city._wxMeta = { source: "none", fetchedAt: null };
+          failed += 1;
+          historicalSkipped += 1;
+        }
+        done += 1;
+        setProgress(done, activeCities.length, failed);
+        setStatus(`Fetching weather… (${done}/${activeCities.length})`);
+        return;
+      }
       if (needsNet) {
         try {
           const wx = await fetchWeatherNetwork(city); const fetchedAt = Date.now();
@@ -2617,6 +2848,17 @@ function startApp(){
           if (!city._pulsed) { city._pulsed = true; pulseDotOnce(city); }
           refreshTooltipIfHovering(city);
         } catch (err) {
+          const msg = String(err?.message || err || "unknown error");
+          if (errorSamples.length < 3) {
+            errorSamples.push(`${city.city}, ${city.state}: ${msg}`);
+          }
+          console.error(`[weather-fetch] ${city.city}, ${city.state} failed`, err);
+          if (isHistoricalMode && isProviderDailyLimitError(err)) {
+            historicalLimitReached = true;
+            const until = lockTimeMachineUntilTomorrow();
+            applyTimeMachineAvailability();
+            setStatus(`Time Machine provider daily limit reached. Loaded partial results so far. Available again around ${formatLockUntil(until)}.`);
+          }
           if (!(city._wx && city._wxMeta?.source === "cache")) { city._wx = null; city._wxError = true; city._wxMeta = { source: "none", fetchedAt: null }; failed += 1; }
         }
       }
@@ -2625,20 +2867,30 @@ function startApp(){
     });
 
     const ok = activeCities.length - failed; const cacheMsg = cacheHits ? ` (cached ${cacheHits})` : "";
-    setStatus(`Done. Updated ${ok}/${activeCities.length} cities${cacheMsg}${failed ? ` (${failed} unavailable)` : ""}. Hover a dot for details. Click a dot to pin.`);
+    const errMsg = (failed > 0 && errorSamples.length > 0)
+      ? ` Example failure: ${errorSamples[0]}`
+      : "";
+    if (isHistoricalMode && historicalLimitReached) {
+      const until = getTimeMachineLockedUntil();
+      setStatus(`Loaded ${ok}/${activeCities.length} cities in Time Machine${cacheMsg}. Provider daily limit reached; ${historicalSkipped} cities skipped. Time Machine disabled until around ${formatLockUntil(until)}.`);
+    } else {
+      setStatus(`Done. Updated ${ok}/${activeCities.length} cities${cacheMsg}${failed ? ` (${failed} unavailable)` : ""}. Hover a dot for details. Click a dot to pin.${errMsg}`);
+    }
     
-    // Auto-detect current hour on initial load
-    if (selectedHourIndex === 0 && !opts.force) {
-      const currentHrStr = new Date().toISOString().slice(0,13) + ":00";
+    // Default timeline to current local hour (rounded) in live mode.
+    if (selectedHourIndex === 0 && !isHistoricalMode) {
       const sample = activeCities.find(c => c._wx?.hourly?.time);
       if (sample) {
-        const idx = sample._wx.hourly.time.findIndex(t => t >= currentHrStr);
-        if (idx !== -1) { selectedHourIndex = idx; if (daySlider) daySlider.value = selectedHourIndex; updateDayLabelUI(); }
+        const idx = findTimelineIndexForCurrentHour(sample._wx.hourly.time);
+        selectedHourIndex = Math.max(0, Math.min(71, idx));
+        if (daySlider) daySlider.value = String(selectedHourIndex);
+        updateDayLabelUI();
       }
     }
 
     computeScaleFromLoaded(false); applyDotColors(false);
     requestAnimationFrame(() => { computeScaleFromLoaded(false); applyDotColors(false); });
+    updateDayLabelUI();
     renderPinnedPanel();
   }
 
@@ -2740,6 +2992,17 @@ function startApp(){
     });
   }
 
+  if(returnLiveBtn){
+    returnLiveBtn.addEventListener("click", () => {
+      if (isPlaying) {
+        isPlaying = false;
+        if(playBtn) playBtn.textContent = "▶️";
+        clearInterval(playInterval);
+      }
+      jumpToLiveHour();
+    });
+  }
+
   if(playBtn) {
     playBtn.addEventListener('click', () => {
       isPlaying = !isPlaying;
@@ -2769,8 +3032,9 @@ function startApp(){
   window.addEventListener("resize", debounce(async () => { try { const us = await loadUSAtlasStates(); cachedUSMap = us; render(us); } catch {} }));
 
   initHistoricalDateInput();
+  applyTimeMachineAvailability();
   setAQIOptionEnabled(true);
-  if(tmDateWrap) tmDateWrap.hidden = true;
+  if(tmDateWrap) tmDateWrap.hidden = !isHistoricalMode;
   if(sportsFilterToggle){
     isSportsFilterActive = !!sportsFilterToggle.checked;
   }
