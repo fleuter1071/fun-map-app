@@ -11,10 +11,17 @@ const USE_SQLITE_LOCAL = NODE_ENV === "development";
 const CLIMATE_WINDOW_YEARS = 5;
 const CLIMATE_STALE_MS = 7 * 24 * 60 * 60 * 1000;
 const CLIMATE_FETCH_TIMEOUT_MS = 25000;
-const CLIMATE_CONCURRENCY = 4;
+const CLIMATE_CONCURRENCY = Math.max(1, Number(process.env.CLIMATE_CONCURRENCY || 2));
 const CITY_VERIFY_TIMEOUT_MS = 8000;
 const CITY_VERIFY_MAX_DISTANCE_KM = 80;
+const CLIMATE_FETCH_RETRIES = Math.max(0, Number(process.env.CLIMATE_FETCH_RETRIES || 2));
+const CLIMATE_RECOMPUTE_COOLDOWN_MS = Math.max(5 * 1000, Number(process.env.CLIMATE_RECOMPUTE_COOLDOWN_MS || 10 * 60 * 1000));
+const CLIMATE_CITY_RETRY_BASE_MS = Math.max(1000, Number(process.env.CLIMATE_CITY_RETRY_BASE_MS || 2 * 60 * 1000));
+const CLIMATE_CITY_RETRY_MAX_MS = Math.max(CLIMATE_CITY_RETRY_BASE_MS, Number(process.env.CLIMATE_CITY_RETRY_MAX_MS || 60 * 60 * 1000));
 let climateRecomputeRunning = false;
+let climateNextAutoRecomputeAt = 0;
+let climateLastRunSummary = null;
+const climateCityRetryState = new Map();
 
 const CITIES = [{"city":"New York","state":"NY","lat":40.6943,"lon":-73.9249,"pop":8537673},{"city":"Los Angeles","state":"CA","lat":34.114,"lon":-118.4068,"pop":3976322},{"city":"Chicago","state":"IL","lat":41.8373,"lon":-87.6861,"pop":2704958},{"city":"Houston","state":"TX","lat":29.7871,"lon":-95.3936,"pop":2303482},{"city":"Phoenix","state":"AZ","lat":33.5722,"lon":-112.0891,"pop":1615017},{"city":"Philadelphia","state":"PA","lat":40.0076,"lon":-75.134,"pop":1567872},{"city":"San Antonio","state":"TX","lat":29.4722,"lon":-98.5247,"pop":1492510},{"city":"San Diego","state":"CA","lat":32.8312,"lon":-117.1225,"pop":1406630},{"city":"Dallas","state":"TX","lat":32.7938,"lon":-96.7659,"pop":1317929},{"city":"San Jose","state":"CA","lat":37.302,"lon":-121.8488,"pop":1025350},{"city":"Austin","state":"TX","lat":30.3038,"lon":-97.7545,"pop":947890},{"city":"Jacksonville","state":"FL","lat":30.3322,"lon":-81.6749,"pop":880619},{"city":"San Francisco","state":"CA","lat":37.7561,"lon":-122.4429,"pop":870887},{"city":"Columbus","state":"OH","lat":39.9859,"lon":-82.9852,"pop":860090},{"city":"Indianapolis","state":"IN","lat":39.7771,"lon":-86.1458,"pop":855164},{"city":"Fort Worth","state":"TX","lat":32.7813,"lon":-97.3466,"pop":854113},{"city":"Charlotte","state":"NC","lat":35.208,"lon":-80.8308,"pop":842051},{"city":"Seattle","state":"WA","lat":47.6217,"lon":-122.3238,"pop":704352},{"city":"Denver","state":"CO","lat":39.7621,"lon":-104.8759,"pop":693060},{"city":"El Paso","state":"TX","lat":31.8478,"lon":-106.431,"pop":683080},{"city":"Washington","state":"DC","lat":38.9047,"lon":-77.0163,"pop":681170},{"city":"Boston","state":"MA","lat":42.3189,"lon":-71.0838,"pop":673184},{"city":"Detroit","state":"MI","lat":42.3834,"lon":-83.1024,"pop":672795},{"city":"Nashville","state":"TN","lat":36.1714,"lon":-86.7844,"pop":660388},{"city":"Memphis","state":"TN","lat":35.1047,"lon":-89.9773,"pop":652717},{"city":"Portland","state":"OR","lat":45.5372,"lon":-122.65,"pop":639863},{"city":"Oklahoma City","state":"OK","lat":35.4677,"lon":-97.5138,"pop":638367},{"city":"Las Vegas","state":"NV","lat":36.2288,"lon":-115.2603,"pop":632912},{"city":"Louisville","state":"KY","lat":38.1662,"lon":-85.6488,"pop":616261},{"city":"Baltimore","state":"MD","lat":39.3051,"lon":-76.6144,"pop":614664},{"city":"Milwaukee","state":"WI","lat":43.064,"lon":-87.9669,"pop":595047},{"city":"Albuquerque","state":"NM","lat":35.1055,"lon":-106.6476,"pop":559277},{"city":"Tucson","state":"AZ","lat":32.1558,"lon":-110.8777,"pop":530706},{"city":"Fresno","state":"CA","lat":36.7834,"lon":-119.7933,"pop":522053},{"city":"Sacramento","state":"CA","lat":38.5666,"lon":-121.4683,"pop":495234},{"city":"Mesa","state":"AZ","lat":33.4016,"lon":-111.718,"pop":484587},{"city":"Kansas City","state":"MO","lat":39.1239,"lon":-94.5541,"pop":481420},{"city":"Atlanta","state":"GA","lat":33.7627,"lon":-84.4231,"pop":472522},{"city":"Long Beach","state":"CA","lat":33.8059,"lon":-118.161,"pop":470130},{"city":"Colorado Springs","state":"CO","lat":38.8673,"lon":-104.7605,"pop":465101},{"city":"Raleigh","state":"NC","lat":35.8323,"lon":-78.6441,"pop":458880},{"city":"Miami","state":"FL","lat":25.784,"lon":-80.2102,"pop":453579},{"city":"Virginia Beach","state":"VA","lat":36.7335,"lon":-76.0435,"pop":452602},{"city":"Omaha","state":"NE","lat":41.2634,"lon":-96.0453,"pop":446970},{"city":"Oakland","state":"CA","lat":37.7903,"lon":-122.2165,"pop":420005},{"city":"Minneapolis","state":"MN","lat":44.9635,"lon":-93.2679,"pop":413651},{"city":"Tulsa","state":"OK","lat":36.1284,"lon":-95.9037,"pop":403090},{"city":"Arlington","state":"TX","lat":32.6998,"lon":-97.1251,"pop":392772},{"city":"New Orleans","state":"LA","lat":30.0687,"lon":-89.9288,"pop":391495},{"city":"Wichita","state":"KS","lat":37.6894,"lon":-97.344,"pop":389902}];
 const DEFAULT_CITIES = CITIES.map((c) => ({ ...c }));
@@ -293,16 +300,57 @@ function parseCityInput(payload) {
   };
 }
 
-async function fetchJSONWithTimeout(url, timeoutMs = CLIMATE_FETCH_TIMEOUT_MS) {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), timeoutMs);
-  try {
-    const res = await fetch(url, { signal: ctrl.signal, headers: { Accept: "application/json" } });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await res.json();
-  } finally {
-    clearTimeout(t);
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getRetryDelayMs(res, attempt) {
+  const header = res?.headers?.get?.("retry-after");
+  const asSeconds = Number(header);
+  if (Number.isFinite(asSeconds) && asSeconds > 0) {
+    return Math.max(250, asSeconds * 1000);
   }
+  const asDate = Date.parse(String(header || ""));
+  if (Number.isFinite(asDate)) {
+    return Math.max(250, asDate - Date.now());
+  }
+  return Math.min(8000, 500 * Math.pow(2, attempt));
+}
+
+async function fetchJSONWithTimeout(url, timeoutMs = CLIMATE_FETCH_TIMEOUT_MS) {
+  let lastError = null;
+
+  for (let attempt = 0; attempt <= CLIMATE_FETCH_RETRIES; attempt += 1) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { signal: ctrl.signal, headers: { Accept: "application/json" } });
+      if (!res.ok) {
+        if (res.status === 429 && attempt < CLIMATE_FETCH_RETRIES) {
+          const waitMs = getRetryDelayMs(res, attempt);
+          await sleep(waitMs);
+          continue;
+        }
+        throw new Error(`HTTP ${res.status}`);
+      }
+      return await res.json();
+    } catch (err) {
+      lastError = err;
+      if (attempt >= CLIMATE_FETCH_RETRIES) {
+        throw lastError;
+      }
+      const message = String(err?.message || "");
+      const shouldRetry = message.includes("HTTP 429") || err?.name === "AbortError";
+      if (!shouldRetry) {
+        throw err;
+      }
+      await sleep(Math.min(8000, 500 * Math.pow(2, attempt)));
+    } finally {
+      clearTimeout(t);
+    }
+  }
+
+  throw lastError || new Error("Fetch failed");
 }
 
 async function verifyCityCandidate(city) {
@@ -387,6 +435,51 @@ async function fetchColdestForCity(city, startDate, endDate) {
   return { city_key: cityKey(city), coldest_date: minDate, coldest_low_f: minLow };
 }
 
+function getCityRetryEntry(cityKeyValue) {
+  return climateCityRetryState.get(cityKeyValue) || null;
+}
+
+function getCityRetryDelayMs(failures) {
+  const attempts = Math.max(1, Number(failures) || 1);
+  return Math.min(CLIMATE_CITY_RETRY_MAX_MS, CLIMATE_CITY_RETRY_BASE_MS * Math.pow(2, attempts - 1));
+}
+
+function markCityComputeFailure(cityKeyValue, error) {
+  const now = Date.now();
+  const prev = getCityRetryEntry(cityKeyValue);
+  const failures = (prev?.failures || 0) + 1;
+  const delayMs = getCityRetryDelayMs(failures);
+  climateCityRetryState.set(cityKeyValue, {
+    failures,
+    nextRetryAt: now + delayMs,
+    lastError: String(error?.message || error || "unknown error"),
+    lastFailedAt: now
+  });
+}
+
+function clearCityComputeFailure(cityKeyValue) {
+  climateCityRetryState.delete(cityKeyValue);
+}
+
+function getCityRetryMsRemaining(cityKeyValue) {
+  const entry = getCityRetryEntry(cityKeyValue);
+  if (!entry?.nextRetryAt) {
+    return 0;
+  }
+  return Math.max(0, entry.nextRetryAt - Date.now());
+}
+
+function getNextCityRetryAt() {
+  let min = null;
+  for (const entry of climateCityRetryState.values()) {
+    if (!entry?.nextRetryAt) continue;
+    if (min == null || entry.nextRetryAt < min) {
+      min = entry.nextRetryAt;
+    }
+  }
+  return min;
+}
+
 async function asyncPool(limit, items, iteratorFn) {
   const ret = [];
   const executing = [];
@@ -394,10 +487,16 @@ async function asyncPool(limit, items, iteratorFn) {
     const p = Promise.resolve().then(() => iteratorFn(item));
     ret.push(p);
     if (limit <= items.length) {
-      const e = p.finally(() => {
-        const i = executing.indexOf(e);
-        if (i >= 0) executing.splice(i, 1);
-      });
+      const e = p.then(
+        () => {
+          const i = executing.indexOf(e);
+          if (i >= 0) executing.splice(i, 1);
+        },
+        () => {
+          const i = executing.indexOf(e);
+          if (i >= 0) executing.splice(i, 1);
+        }
+      );
       executing.push(e);
       if (executing.length >= limit) await Promise.race(executing);
     }
@@ -431,41 +530,90 @@ async function isClimateDataStale(windowYears = CLIMATE_WINDOW_YEARS, expectedCi
 async function precomputeColdestDays(windowYears = CLIMATE_WINDOW_YEARS, force = false) {
   if (climateRecomputeRunning) return { started: false, reason: "already-running" };
   const targetCities = await getAllCities();
+  const now = Date.now();
+
+  if (!force && now < climateNextAutoRecomputeAt) {
+    return { started: false, reason: "cooldown" };
+  }
+
   if (!force) {
     const stale = await isClimateDataStale(windowYears, targetCities.length);
     if (!stale) return { started: false, reason: "fresh" };
   }
+
+  const eligibleCities = force
+    ? targetCities
+    : targetCities.filter((city) => getCityRetryMsRemaining(cityKey(city)) <= 0);
+  const skippedByBackoff = Math.max(0, targetCities.length - eligibleCities.length);
+  if (!force && eligibleCities.length === 0) {
+    const nextCityRetryAt = getNextCityRetryAt();
+    climateNextAutoRecomputeAt = nextCityRetryAt || (Date.now() + CLIMATE_RECOMPUTE_COOLDOWN_MS);
+    climateLastRunSummary = {
+      at: new Date().toISOString(),
+      started: false,
+      reason: "city-backoff",
+      eligible: 0,
+      skippedByBackoff
+    };
+    return { started: false, reason: "city-backoff" };
+  }
+
   climateRecomputeRunning = true;
   const { startDate, endDate } = computeWindowDates(windowYears);
   const computedAt = new Date().toISOString();
   try {
-    const settled = await asyncPool(CLIMATE_CONCURRENCY, targetCities, async (city) => {
-      const result = await fetchColdestForCity(city, startDate, endDate);
-      await dbRun(
-        `INSERT INTO city_climate_extremes
-         (city_key, window_years, window_start, window_end, coldest_date, coldest_low_f, source, computed_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(city_key, window_years) DO UPDATE SET
-           window_start=excluded.window_start,
-           window_end=excluded.window_end,
-           coldest_date=excluded.coldest_date,
-           coldest_low_f=excluded.coldest_low_f,
-           source=excluded.source,
-           computed_at=excluded.computed_at`,
-        [
-          result.city_key,
-          windowYears,
-          startDate,
-          endDate,
-          result.coldest_date,
-          result.coldest_low_f,
-          "archive_5y",
-          computedAt
-        ]
-      );
+    const settled = await asyncPool(CLIMATE_CONCURRENCY, eligibleCities, async (city) => {
+      const cityKeyValue = cityKey(city);
+      try {
+        const result = await fetchColdestForCity(city, startDate, endDate);
+        await dbRun(
+          `INSERT INTO city_climate_extremes
+           (city_key, window_years, window_start, window_end, coldest_date, coldest_low_f, source, computed_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(city_key, window_years) DO UPDATE SET
+             window_start=excluded.window_start,
+             window_end=excluded.window_end,
+             coldest_date=excluded.coldest_date,
+             coldest_low_f=excluded.coldest_low_f,
+             source=excluded.source,
+             computed_at=excluded.computed_at`,
+          [
+            result.city_key,
+            windowYears,
+            startDate,
+            endDate,
+            result.coldest_date,
+            result.coldest_low_f,
+            "archive_5y",
+            computedAt
+          ]
+        );
+        clearCityComputeFailure(cityKeyValue);
+      } catch (err) {
+        markCityComputeFailure(cityKeyValue, err);
+        throw err;
+      }
     });
     const failed = settled.filter((x) => x.status !== "fulfilled").length;
-    return { started: true, failed };
+    const succeeded = settled.length - failed;
+
+    if (failed > 0) {
+      const nextCityRetryAt = getNextCityRetryAt();
+      const cooldownTarget = Date.now() + CLIMATE_RECOMPUTE_COOLDOWN_MS;
+      climateNextAutoRecomputeAt = Math.max(nextCityRetryAt || 0, cooldownTarget);
+    } else {
+      climateNextAutoRecomputeAt = 0;
+    }
+
+    climateLastRunSummary = {
+      at: new Date().toISOString(),
+      started: true,
+      eligible: eligibleCities.length,
+      skippedByBackoff,
+      succeeded,
+      failed
+    };
+    return { started: true, failed, succeeded, eligible: eligibleCities.length, skippedByBackoff };
   } finally {
     climateRecomputeRunning = false;
   }
@@ -642,7 +790,9 @@ app.get("/api/coldest-days", async (req, res) => {
   try {
     const expectedCityCount = (await getAllCities()).length;
     const stale = await isClimateDataStale(CLIMATE_WINDOW_YEARS, expectedCityCount);
-    if (stale && !climateRecomputeRunning) {
+    const now = Date.now();
+    const cooldownMsRemaining = Math.max(0, climateNextAutoRecomputeAt - now);
+    if (stale && !climateRecomputeRunning && cooldownMsRemaining <= 0) {
       precomputeColdestDays(CLIMATE_WINDOW_YEARS, false).catch((err) => {
         console.error("coldest precompute failed:", err?.message || err);
       });
@@ -653,6 +803,12 @@ app.get("/api/coldest-days", async (req, res) => {
       source: "archive_5y_precompute",
       stale,
       computing: climateRecomputeRunning,
+      recompute: {
+        cooldownMsRemaining,
+        nextAutoRecomputeAt: climateNextAutoRecomputeAt ? new Date(climateNextAutoRecomputeAt).toISOString() : null,
+        cityBackoffCount: climateCityRetryState.size,
+        lastRun: climateLastRunSummary
+      },
       rows
     });
   } catch (err) {
@@ -683,6 +839,9 @@ async function startServer() {
   app.listen(PORT, () => {
     const dbMode = USE_SQLITE_LOCAL ? `sqlite (${SQLITE_DB_PATH})` : "postgres";
     console.log(`Memory Map server running at http://127.0.0.1:${PORT} [${NODE_ENV}] [db=${dbMode}]`);
+    console.log(
+      `Climate precompute config: concurrency=${CLIMATE_CONCURRENCY}, retries=${CLIMATE_FETCH_RETRIES}, timeoutMs=${CLIMATE_FETCH_TIMEOUT_MS}, staleMs=${CLIMATE_STALE_MS}, cooldownMs=${CLIMATE_RECOMPUTE_COOLDOWN_MS}, cityRetryBaseMs=${CLIMATE_CITY_RETRY_BASE_MS}, cityRetryMaxMs=${CLIMATE_CITY_RETRY_MAX_MS}`
+    );
     precomputeColdestDays(CLIMATE_WINDOW_YEARS, false).catch((err) => {
       console.error("initial coldest precompute failed:", err?.message || err);
     });

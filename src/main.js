@@ -343,6 +343,44 @@ function startApp(){
   const USER_LOCATION_KEY = "userLocation:v1";
   let userLocationTagTimer = null;
 
+  function getSelectedWeatherSnapshot(wx){
+    const cur = wx?.current ?? {};
+    const hourly = wx?.hourly ?? {};
+    const idx = Math.max(0, Math.min(71, Number(selectedHourIndex) || 0));
+
+    const hourlyAt = (arr, fallback = null) => {
+      if (!Array.isArray(arr)) return fallback;
+      const value = arr[idx];
+      return (value != null && Number.isFinite(Number(value))) ? Number(value) : fallback;
+    };
+    const hourlyAtRaw = (arr, fallback = null) => {
+      if (!Array.isArray(arr)) return fallback;
+      const value = arr[idx];
+      return value == null ? fallback : value;
+    };
+
+    const temp = hourlyAt(hourly.temp, Number.isFinite(Number(cur.temp)) ? Number(cur.temp) : null);
+    const code = hourlyAt(hourly.code, Number.isFinite(Number(cur.code)) ? Number(cur.code) : null);
+    const windSpeed = hourlyAt(hourly.windSpeed, Number.isFinite(Number(cur.windSpeed)) ? Number(cur.windSpeed) : null);
+    const windDir = hourlyAt(hourly.windDir, Number.isFinite(Number(cur.windDir)) ? Number(cur.windDir) : null);
+    const time = hourlyAtRaw(hourly.time, cur.time ?? null);
+    const feels = Number.isFinite(Number(cur.feels)) && time && cur.time && String(time) === String(cur.time)
+      ? Number(cur.feels)
+      : temp;
+
+    return {
+      time,
+      temp,
+      feels,
+      code,
+      windSpeed,
+      windDir,
+      windGust: cur.windGust ?? null,
+      humidity: cur.humidity ?? null,
+      cloud: cur.cloud ?? null
+    };
+  }
+
   // AQI Color mapping
   function getAQIColor(aqi) {
     if (aqi == null || !isFinite(aqi)) return ERROR_COLOR;
@@ -1549,12 +1587,12 @@ function startApp(){
       moveTooltip(event); return;
     }
 
-    const cur = wx.current ?? {};
-    const cond = wxCodeToIconLabel(cur.code);
-    const temp = fmtInt(cur.temp); const feels = fmtInt(cur.feels);
-    const hum = fmtInt(cur.humidity); const cloud = fmtInt(cur.cloud);
-    const ws = fmtInt(cur.windSpeed); const wg = fmtInt(cur.windGust);
-    const wdir = degToCompass(cur.windDir); const wdeg = (cur.windDir != null && isFinite(cur.windDir)) ? ` (${Math.round(cur.windDir)}°)` : "";
+    const snap = getSelectedWeatherSnapshot(wx);
+    const cond = wxCodeToIconLabel(snap.code);
+    const temp = fmtInt(snap.temp); const feels = fmtInt(snap.feels);
+    const hum = fmtInt(snap.humidity); const cloud = fmtInt(snap.cloud);
+    const ws = fmtInt(snap.windSpeed); const wg = fmtInt(snap.windGust);
+    const wdir = degToCompass(snap.windDir); const wdeg = (snap.windDir != null && isFinite(snap.windDir)) ? ` (${Math.round(snap.windDir)}°)` : "";
 
     const forecastCards = format3DayTooltipCards(d);
     const spark = sparklineBlockForCity(d);
@@ -1808,9 +1846,9 @@ function startApp(){
       if (c?._wxError) {
         heroSub = `${weatherBadgeHTML(c)} <span style="color: var(--muted); margin-left:6px;">Weather unavailable.</span>`;
       } else if (c?._wx) {
-        const wx = c._wx; const cur = wx.current ?? {}; const cond = wxCodeToIconLabel(cur.code);
-        const temp = fmtInt(cur.temp); const feels = fmtInt(cur.feels); const hum = fmtInt(cur.humidity); const cloud = fmtInt(cur.cloud);
-        const ws = fmtInt(cur.windSpeed); const wg = fmtInt(cur.windGust); const wdir = degToCompass(cur.windDir);
+        const wx = c._wx; const snap = getSelectedWeatherSnapshot(wx); const cond = wxCodeToIconLabel(snap.code);
+        const temp = fmtInt(snap.temp); const feels = fmtInt(snap.feels); const hum = fmtInt(snap.humidity); const cloud = fmtInt(snap.cloud);
+        const ws = fmtInt(snap.windSpeed); const wg = fmtInt(snap.windGust); const wdir = degToCompass(snap.windDir);
         heroMain = `${temp}°F`;
         heroSub = `${cond.icon} ${cond.label} <span style="color: var(--muted);">feels ${feels}°F</span>`;
         conditionsRows = `<div class="pin-data-row"><span class="pin-data-label">Humidity</span><span class="pin-data-value">${hum}%</span></div><div class="pin-data-row"><span class="pin-data-label">Wind</span><span class="pin-data-value">${ws} mph ${wdir}</span></div><div class="pin-data-row"><span class="pin-data-label">Gust</span><span class="pin-data-value">${wg} mph</span></div><div class="pin-data-row"><span class="pin-data-label">Clouds</span><span class="pin-data-value">${cloud}%</span></div>`;

@@ -1,0 +1,28 @@
+Maps App Local Restart + Verify Instructions
+
+Default local port: 8010
+
+1) Kill anything already using port 8010
+
+netstat -ano | findstr :8010
+
+If you see a PID in the last column, stop it:
+Stop-Process -Id <PID> -Force
+
+2) Start the app fresh (in foreground for debugging)
+
+npm start
+
+3) Verify server endpoints from a second PowerShell window
+
+curl http://127.0.0.1:8010/api/cities
+curl "http://127.0.0.1:8010/api/coldest-days?window=5y"
+curl http://127.0.0.1:8010/api/memories
+
+4) Open in browser
+
+http://127.0.0.1:8010
+
+5) If something fails
+
+Copy/paste the exact npm start output and endpoint error output for debugging.
