@@ -452,3 +452,61 @@ Implemented a polished V1 audio enhancement for the Upside Down theme inside the
 1. Run a production browser smoke test covering Upside Down on/off, autoplay-block fallback, mute persistence, and hidden-tab behavior.
 2. Add Playwright (or equivalent) smoke coverage for the Customize panel and theme-audio state transitions.
 3. If more themed audio is added later, extract a small theme-media module instead of growing ad hoc logic inside `main.js`.
+## Date/time
+2026-03-08 17:41:41 -04:00
+
+## Feature name, description, and value provided
+Spooky Theme Audio + Theme Locking + Upside Down Rift Tuning
+Description: Added optional looping audio for the existing Spooky theme using the same Customize-panel control model as Upside Down, generalized the theme-audio system so both themes share the same browser-safe playback behavior, made Spooky and Upside Down mutually exclusive, fixed the city-set handoff when switching from Spooky to Upside Down, and tuned the Upside Down rift overlay to a subtler ambient intensity.
+Value provided: Delivers parity between the app’s two premium themes, prevents broken mixed-theme states, restores correct city behavior when changing themes, and keeps the Upside Down atmosphere visible without overpowering the map.
+
+## Summary
+Implemented a second theme-audio experience for Spooky mode using the provided halloween-hip-hop.mp3 asset and the same compact Theme Audio UX pattern used for Upside Down. Refactored the previous Upside Down-only audio logic into a shared per-theme controller with theme-specific asset paths, localStorage keys, and UI bindings. Updated theme switching so Spooky and Upside Down can no longer be active simultaneously, which also fixes the prior hybrid-state bug where Upside Down visuals could persist alongside the Spooky horror-city dataset. When switching from Spooky to Upside Down, the map now restores the default top-city set and re-renders immediately. Also tuned the Upside Down rift-zone overlay to remain subtly visible and animated without dominating the map surface.
+
+## Files changed
+- C:\Users\dougs\Weather_Map_Cities_2_Codex\index.html
+- C:\Users\dougs\Weather_Map_Cities_2_Codex\src\main.js
+- C:\Users\dougs\Weather_Map_Cities_2_Codex\styles\main.css
+- C:\Users\dougs\Weather_Map_Cities_2_Codex\assets\audio\README.txt
+- C:\Users\dougs\Weather_Map_Cities_2_Codex\assets\audio\halloween-hip-hop.mp3
+
+## Technical Architecture changes or key technical decisions made
+- Replaced the Upside Down-only audio implementation with a shared theme-audio configuration/state model in src/main.js keyed by theme (spooky, upside).
+- Introduced shared theme-audio helpers for init/play/pause/mute/sync/render behavior while preserving theme-scoped localStorage and UI state.
+- Added Spooky-specific audio persistence keys: uswx:spookyAudioMuted:v1 and uswx:spookyAudioEnabled:v1.
+- Kept audio lifecycle tied to theme lifecycle rather than introducing a global app music system.
+- Enforced mutual exclusivity between Spooky and Upside Down so visual theme state, active city dataset, and audio state cannot drift into invalid mixed combinations.
+- Fixed theme-switch rendering by explicitly restoring TOP_CITIES and forcing a map re-render when entering Upside Down from Spooky.
+- Tuned the existing Upside Down rift overlay at the CSS layer by reducing glow, opacity, stroke weight, and pulse intensity rather than removing the effect entirely.
+
+## Assumptions
+- Spooky audio should behave identically to Upside Down audio from a UX and lifecycle standpoint.
+- The two theme modes are conceptually exclusive and should never be active together.
+- Reusing a shared theme-audio controller is preferable to maintaining separate parallel implementations.
+- The rift overlay should remain present in Upside Down mode, but only as subtle ambient motion in the background.
+- Static asset serving from the app root remains acceptable for shipping theme audio files.
+
+## Known limitations
+- QA for the audio flows remains partly runtime smoke + code review; no automated browser E2E currently validates autoplay-block or mute/unmute UI transitions.
+- Browser autoplay and resume behavior still depend on user/browser media policy settings.
+- The rift overlay intensity is manually tuned and may still need small adjustments by display/browser.
+- Theme audio remains a V1 compact control model with no exposed volume slider or advanced playback controls.
+
+## Key learnings that you can bring with you to future sessions
+- Once multiple themes gain media behavior, a shared theme-audio abstraction is cleaner and safer than copy-pasting one-off logic.
+- Theme exclusivity should be enforced in state setters, not just implied in the UI, to avoid hybrid render/data bugs.
+- Visual atmosphere effects that feel good in isolation can become too prominent after unrelated render-path changes, so CSS-only tuning is a useful containment strategy.
+- When theme changes also alter datasets, the map should re-render immediately after the active-city swap instead of relying on later async data refreshes.
+- Small UI parity features across premium themes are easier to maintain when the structure, persistence, and failure handling are intentionally symmetric.
+
+## Remaining TODOs
+- Add automated browser smoke coverage for Spooky and Upside Down audio enable/mute/block flows.
+- Add a targeted regression test for theme exclusivity and city-set restoration when switching between Spooky and Upside Down.
+- Run a quick production browser pass on the tuned Upside Down rift overlay to confirm the new subtlety level is right on the deployed build.
+- Consider a small shared debug/state surface for active theme/media state if more theme complexity is added later.
+
+## Next steps
+1. Run a production smoke test covering Spooky audio, Upside Down audio, theme exclusivity, and city-set switching.
+2. Add Playwright (or equivalent) smoke coverage for Customize-panel theme toggles and theme-audio controls.
+3. If more theme-specific effects are added later, separate theme behavior into a dedicated module so main.js does not become the long-term integration bottleneck.
+
