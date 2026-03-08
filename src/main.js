@@ -1,9 +1,14 @@
 ﻿const statusEl = document.getElementById('statusText');
+const statusChipEl = document.getElementById('legendStatus');
+const statusIconEl = document.getElementById('legendStatusIcon');
 const progressTrackEl = document.getElementById('progressTrack');
 const progressFillEl = document.getElementById('progressFill');
+let legendStatusTimer = null;
 
 const LOADING_COLOR = "rgba(148,163,184,0.35)";
 const ERROR_COLOR = "rgba(100,116,139,0.85)";
+const LEGEND_STATUS_AUTO_DISMISS_MS = 2600;
+const LEGEND_STATUS_WARNING_DISMISS_MS = 4200;
 
 // Clustering configuration. Adjust radiusPx to tune collision avoidance aggressiveness.
 const CLUSTER_CONFIG = {
@@ -12,9 +17,9 @@ const CLUSTER_CONFIG = {
 };
 
 function setProgress(done, total, failed = 0){
-  if(!progressTrackEl || !progressFillEl) return;
+  if(!progressTrackEl || !progressFillEl || !statusChipEl) return;
   const pct = total ? Math.max(0, Math.min(1, done / total)) : 0;
-  progressTrackEl.style.display = "inline-flex";
+  statusChipEl.dataset.progressVisible = total > 0 ? "true" : "false";
   progressFillEl.style.width = `${(pct * 100).toFixed(1)}%`;
   if(done >= total){
     progressTrackEl.style.opacity = "0.65";
@@ -23,7 +28,42 @@ function setProgress(done, total, failed = 0){
   }
 }
 
-function setStatus(msg){ if(statusEl) statusEl.textContent = msg; }
+function clearLegendStatus({ immediate = false } = {}){
+  if(legendStatusTimer){
+    clearTimeout(legendStatusTimer);
+    legendStatusTimer = null;
+  }
+  if(!statusChipEl) return;
+  statusChipEl.dataset.progressVisible = "false";
+  statusChipEl.classList.add("is-hidden");
+  if(immediate && statusEl){
+    statusEl.textContent = "";
+  }
+}
+
+function showLegendStatus(message, type = "info", options = {}){
+  if(!statusChipEl || !statusEl) return;
+  if(legendStatusTimer){
+    clearTimeout(legendStatusTimer);
+    legendStatusTimer = null;
+  }
+  const persist = !!options.persist;
+  const duration = options.duration ?? (type === "warning" || type === "error" ? LEGEND_STATUS_WARNING_DISMISS_MS : LEGEND_STATUS_AUTO_DISMISS_MS);
+  statusEl.textContent = message;
+  statusChipEl.dataset.statusType = type;
+  statusChipEl.dataset.progressVisible = options.showProgress ? "true" : "false";
+  if(statusIconEl){
+    statusIconEl.dataset.statusType = type;
+  }
+  statusChipEl.classList.remove("is-hidden");
+  if(!persist){
+    legendStatusTimer = setTimeout(() => clearLegendStatus(), duration);
+  }
+}
+
+function setStatus(message, options = {}){
+  showLegendStatus(message, options.type || "info", options);
+}
 
 function loadScript(url){
   return new Promise((resolve, reject) => {
@@ -47,7 +87,7 @@ async function loadWithFallback(urls, name){
 
 async function start(){
   try {
-    setStatus('Loading libraries...');
+    setStatus('Loading libraries…', { type: 'loading', persist: true });
     await loadWithFallback([
       'https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js',
       'https://unpkg.com/d3@7/dist/d3.min.js',
@@ -65,7 +105,7 @@ async function start(){
     startApp();
   } catch (e) {
     console.error(e);
-    setStatus('Failed to load required libraries. Check internet/CDN access.');
+    setStatus('Libraries unavailable', { type: 'error', persist: true, duration: 5200 });
   }
 }
 function startApp(){
@@ -1173,7 +1213,7 @@ function startApp(){
   async function jumpToMemoryDate(memory){
     if(isTimeMachineLocked()){
       const until = getTimeMachineLockedUntil();
-      setStatus(`${TIME_MACHINE_LOCKED_REASON} Available again around ${formatLockUntil(until)}.`);
+      setStatus(`Historical unavailable`, { type: "warning", duration: 5200 });
       return;
     }
     if(!memory || !memory.memory_date) return;
@@ -1308,7 +1348,7 @@ function startApp(){
       if(timeMachineToggle) timeMachineToggle.checked = false;
       if(tmDateWrap) tmDateWrap.hidden = true;
       const until = getTimeMachineLockedUntil();
-      setStatus(`${TIME_MACHINE_LOCKED_REASON} Available again around ${formatLockUntil(until)}.`);
+      setStatus(`Historical unavailable`, { type: "warning", duration: 5200 });
       return;
     }
     isHistoricalMode = !!nextMode;
@@ -1450,7 +1490,7 @@ function startApp(){
       if(isTimeMachineLocked()){
         timeMachineToggle.checked = false;
         const until = getTimeMachineLockedUntil();
-        setStatus(`${TIME_MACHINE_LOCKED_REASON} Available again around ${formatLockUntil(until)}.`);
+        setStatus(`Historical unavailable`, { type: "warning", duration: 5200 });
         return;
       }
       if (isPlaying) { isPlaying = false; if(playBtn) playBtn.textContent = "▶️"; clearInterval(playInterval); }
@@ -1622,6 +1662,8 @@ function startApp(){
   }
 
   const legendTagEl = document.getElementById('legendTag');
+  const legendMetricEl = document.getElementById('legendMetric');
+  const mapHudEl = document.getElementById('mapHud');
   const pinnedPanelEl = document.getElementById('pinnedPanel');
   const pinnedListEl = document.getElementById('pinnedList');
   const pinnedHintEl = document.getElementById("pinnedHint");
@@ -1820,7 +1862,7 @@ function startApp(){
     if(isHistoricalMode) return;
     if(isFetchingAQI) return;
     isFetchingAQI = true;
-    setStatus(`Fetching live Air Quality data…`);
+    setStatus(`Loading AQI…`, { type: "loading", persist: true, showProgress: true });
     setProgress(0, activeCities.length, 0);
     let done = 0;
     const poolSize = isHistoricalMode ? CONCURRENCY_HIST : CONCURRENCY;
@@ -1828,7 +1870,7 @@ function startApp(){
       if (city._aqi === undefined) { try { city._aqi = await fetchAQINetwork(city); } catch(e) { city._aqi = null; } }
       done++; setProgress(done, activeCities.length, 0); computeScaleFromLoaded(true);
     });
-    setStatus(`Updated map with Live AQI.`);
+    setStatus(`AQI updated`, { type: "success" });
     isFetchingAQI = false;
   }
 
@@ -2180,29 +2222,47 @@ function startApp(){
     schedulePermalinkUpdate();
   }
 
+  function getLegendMetricLabel(){
+    if(colorMode === "aqi") return "AQI";
+    if(colorMode === "coldest") return "Coldest";
+    return colorMode === "precip" ? "Precip" : "Temp";
+  }
+
+  function formatLegendTimeLabel(timestampMs){
+    if(!Number.isFinite(timestampMs)) return `+${selectedHourIndex}h`;
+    const dt = new Date(timestampMs);
+    const dow = dt.toLocaleDateString([], { weekday: "short" });
+    const hour = dt.toLocaleTimeString([], { hour: "numeric" });
+    return `${dow} ${hour}`;
+  }
+
+  function updateLegendContext(contextLabel){
+    if(legendTagEl) legendTagEl.textContent = contextLabel;
+    if(legendMetricEl) legendMetricEl.textContent = getLegendMetricLabel();
+  }
+
   function updateDayLabelUI(){
     syncTimelineStateUI();
     if(colorMode === "aqi"){
        if(dayLabelEl) dayLabelEl.textContent = "Live AQI";
-       if(legendTagEl) legendTagEl.textContent = "Current Conditions";
+       updateLegendContext("Live");
        return;
     }
     if(colorMode === "coldest"){
       if(dayLabelEl) dayLabelEl.textContent = "Coldest";
-      if(legendTagEl) legendTagEl.textContent = "Coldest Day (Loaded Window)";
+      updateLegendContext("Loaded Window");
       return;
     }
     const sampleCity = activeCities.find(c => c._wx && c._wx.hourly && c._wx.hourly.time && c._wx.hourly.time.length > selectedHourIndex);
     if(sampleCity) {
       const ts = parseHourlyTimestampMs(sampleCity._wx.hourly.time[selectedHourIndex]);
-      const dt = Number.isFinite(ts) ? new Date(ts) : null;
-      const formatted = dt
-        ? dt.toLocaleTimeString([], { weekday: "short", hour: "numeric" })
-        : `+${selectedHourIndex}h`;
+      const formatted = formatLegendTimeLabel(ts);
       if(dayLabelEl) dayLabelEl.textContent = formatted;
-      if(legendTagEl) legendTagEl.textContent = `${formatted} ${colorMode === 'precip' ? 'Precip' : 'Temp'}`;
+      updateLegendContext(formatted);
     } else {
-      if(dayLabelEl) dayLabelEl.textContent = `+${selectedHourIndex}h`;
+      const fallback = `+${selectedHourIndex}h`;
+      if(dayLabelEl) dayLabelEl.textContent = fallback;
+      updateLegendContext(fallback);
     }
   }
 
@@ -2505,8 +2565,15 @@ function startApp(){
 
   function buildUiAvoidZones(){
     const zones = [];
-    if(statusEl){
-      zones.push({ x: 8, y: Math.max(8, mapHeight - 74), w: Math.min(560, mapWidth * 0.62), h: 66 });
+    if(mapHudEl){
+      const hudWidth = mapHudEl.offsetWidth || 272;
+      const hudHeight = mapHudEl.offsetHeight || 92;
+      zones.push({
+        x: Math.max(8, 24),
+        y: Math.max(8, mapHeight - hudHeight - 24),
+        w: Math.min(hudWidth + 12, mapWidth * 0.54),
+        h: hudHeight + 10
+      });
     }
     if(pinnedPanelEl && pinnedPanelEl.style.display !== "none"){
       const panelWidth = pinnedPanelEl.offsetWidth || 300;
@@ -3026,12 +3093,13 @@ function startApp(){
     const minEl = document.getElementById("legendMin");
     const maxEl = document.getElementById("legendMax");
     if (!legend || !bar || !minEl || !maxEl) return;
+    updateLegendContext(legendTagEl?.textContent || "Live");
 
     if (colorMode === "aqi") {
       bar.style.background = `linear-gradient(to right, #10b981 16%, #fbbf24 33%, #f97316 50%, #ef4444 66%, #a855f7 83%, #9f1239 100%)`;
-      minEl.textContent = "0 (Good)";
-      maxEl.textContent = "300+ (Hazardous)";
-      legend.style.display = "flex";
+      minEl.textContent = "0";
+      maxEl.textContent = "300+";
+      legend.style.display = "grid";
       return;
     }
 
@@ -3044,9 +3112,9 @@ function startApp(){
     for (let i = 0; i <= stops; i++) { const t = i / stops; const v = lastMinHigh + (lastMaxHigh - lastMinHigh) * t; const c = colorScale(v); parts.push(`${c} ${(t * 100).toFixed(1)}%`); }
     bar.style.background = `linear-gradient(to right, ${parts.join(", ")})`;
     const unit = (colorMode === "precip") ? "%" : "°";
-    minEl.textContent = `${Math.round(lastMinHigh)}${unit} (min)`;
-    maxEl.textContent = `${Math.round(lastMaxHigh)}${unit} (max)`;
-    legend.style.display = "flex";
+    minEl.textContent = `${Math.round(lastMinHigh)}${unit}`;
+    maxEl.textContent = `${Math.round(lastMaxHigh)}${unit}`;
+    legend.style.display = "grid";
   }
 
   function computeScaleFromLoaded(animated = true) {
@@ -3494,10 +3562,8 @@ function startApp(){
 
   async function loadAllWeather(opts = {}) {
     const force = !!opts.force;
-    let done = 0; let failed = 0; let cacheHits = 0; let netOk = 0;
-    const errorSamples = [];
+    let done = 0; let failed = 0; let cacheHits = 0;
     let historicalLimitReached = false;
-    let historicalSkipped = 0;
 
     for (const c of activeCities) {
       c._wxError = false; c._pulsed = false;
@@ -3508,8 +3574,11 @@ function startApp(){
 
     computeScaleFromLoaded(false); applyDotColors(false); if (pinned.size > 0) renderPinnedPanel();
     setProgress(0, activeCities.length, 0);
-    if (cacheHits > 0) { setStatus(`Loaded cached weather for ${cacheHits}/${activeCities.length} cities. Refreshing…`); } 
-    else { setStatus(`Fetching weather… (0/${activeCities.length})`); }
+    setStatus(cacheHits > 0 ? "Using cached data" : "Loading data…", {
+      type: "loading",
+      persist: true,
+      showProgress: true
+    });
 
     const poolSize = isHistoricalMode ? CONCURRENCY_HIST : CONCURRENCY;
     await asyncPool(poolSize, activeCities, async (city) => {
@@ -3520,48 +3589,40 @@ function startApp(){
           city._wxError = true;
           city._wxMeta = { source: "none", fetchedAt: null };
           failed += 1;
-          historicalSkipped += 1;
         }
         done += 1;
         setProgress(done, activeCities.length, failed);
-        setStatus(`Fetching weather… (${done}/${activeCities.length})`);
         return;
       }
       if (needsNet) {
         try {
           const wx = await fetchWeatherNetwork(city); const fetchedAt = Date.now();
           city._wx = wx; city._wxError = false; city._wxMeta = { source: "live", fetchedAt };
-          writeCache(city, wx, fetchedAt); netOk += 1;
+          writeCache(city, wx, fetchedAt);
           if (!city._pulsed) { city._pulsed = true; pulseDotOnce(city); }
           refreshTooltipIfHovering(city);
         } catch (err) {
-          const msg = String(err?.message || err || "unknown error");
-          if (errorSamples.length < 3) {
-            errorSamples.push(`${city.city}, ${city.state}: ${msg}`);
-          }
           console.error(`[weather-fetch] ${city.city}, ${city.state} failed`, err);
           if (isHistoricalMode && isProviderDailyLimitError(err)) {
             historicalLimitReached = true;
-            const until = lockTimeMachineUntilTomorrow();
+            lockTimeMachineUntilTomorrow();
             applyTimeMachineAvailability();
-            setStatus(`Time Machine provider daily limit reached. Loaded partial results so far. Available again around ${formatLockUntil(until)}.`);
+            setStatus(`Historical unavailable`, { type: "warning", persist: true, duration: 5200 });
           }
           if (!(city._wx && city._wxMeta?.source === "cache")) { city._wx = null; city._wxError = true; city._wxMeta = { source: "none", fetchedAt: null }; failed += 1; }
         }
       }
       computeScaleFromLoaded(true); if (pinned.size > 0) renderPinnedPanel();
-      done += 1; setProgress(done, activeCities.length, failed); setStatus(`Fetching weather… (${done}/${activeCities.length})`);
+      done += 1; setProgress(done, activeCities.length, failed);
     });
 
-    const ok = activeCities.length - failed; const cacheMsg = cacheHits ? ` (cached ${cacheHits})` : "";
-    const errMsg = (failed > 0 && errorSamples.length > 0)
-      ? ` Example failure: ${errorSamples[0]}`
-      : "";
+    const ok = activeCities.length - failed;
     if (isHistoricalMode && historicalLimitReached) {
-      const until = getTimeMachineLockedUntil();
-      setStatus(`Loaded ${ok}/${activeCities.length} cities in Time Machine${cacheMsg}. Provider daily limit reached; ${historicalSkipped} cities skipped. Time Machine disabled until around ${formatLockUntil(until)}.`);
+      setStatus(`Historical unavailable`, { type: "warning", duration: 5200 });
+    } else if (failed > 0) {
+      setStatus(`Partial results loaded`, { type: "warning" });
     } else {
-      setStatus(`Done. Updated ${ok}/${activeCities.length} cities${cacheMsg}${failed ? ` (${failed} unavailable)` : ""}. Hover a dot for details. Click a dot to pin.${errMsg}`);
+      setStatus(`Updated ${ok} cities`, { type: "success" });
     }
     
     // Default timeline to current local hour (rounded) in live mode.
@@ -3588,10 +3649,12 @@ function startApp(){
       await fetchMemories();
       await fetchColdestDays();
       fetchSportsSchedules().catch((e) => console.error(e));
-      setStatus("Loading map…"); const us = await loadUSAtlasStates(); cachedUSMap = us; render(us);
-      setStatus("Map ready. Fetching weather…"); await loadAllWeather();
+      setStatus("Loading map…", { type: "loading", persist: true });
+      const us = await loadUSAtlasStates(); cachedUSMap = us; render(us);
+      setStatus("Loading data…", { type: "loading", persist: true, showProgress: true });
+      await loadAllWeather();
       computeScaleFromLoaded(false); applyDotColors(false);
-    } catch (e) { setStatus("Error loading map or weather. Check your internet connection."); }
+    } catch (e) { setStatus("Map unavailable", { type: "error", persist: true, duration: 5200 }); }
   }
 
   refreshBtn.addEventListener("click", async () => { colorScale = null; lastMinHigh = null; lastMaxHigh = null; applyDotColors(false); updateLegend(); await loadAllWeather({ force: true }); if (colorMode === "aqi") loadAllAQI(); fetchSportsSchedules().catch((e) => console.error(e)); });

@@ -39,6 +39,12 @@
       --dataSurfaceTileBg: rgba(255,255,255,0.04);
       --dataSurfaceTileBorder: rgba(255,255,255,0.10);
       --dataSurfaceShadow: 0 16px 42px rgba(0,0,0,0.34);
+      --legend-card-width: min(272px, calc(100vw - 120px));
+      --legend-card-padding: 10px 12px;
+      --legend-inset-left: 24px;
+      --legend-inset-bottom: 24px;
+      --legend-status-gap: 8px;
+      --legend-status-duration: 280ms;
     }
     body[data-theme="spooky"] {
       --bg: #07080a;
@@ -1090,30 +1096,13 @@
     .pinStatLabel{ font-size: 10px; color: var(--muted); }
     .pinStatValue{ font-size: 12px; font-weight: 900; margin-top: 2px; color: var(--text); }
 
-    #status {
-      margin-top: 10px;
-      font-size: 12px;
-      color: var(--muted);
-      display: flex;
-      gap: 10px;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-    #status .dot {
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      background: var(--accent);
-      display: inline-block;
-      opacity: 0.85;
-    }
-
     /* Loading progress bar */
     .progressTrack{
-      width: 180px;
-      height: 8px;
+      width: 112px;
+      height: 5px;
       border-radius: 999px;
-      border: 1px solid var(--stroke);
-      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.05);
       overflow: hidden;
       display: none;
     }
@@ -1127,36 +1116,8 @@
 
     a { color: var(--accent); }
   
-    #legend {
-      margin-top: 10px;
-      font-size: 12px;
-      color: var(--muted);
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-    #legend .bar {
-      width: min(320px, 70vw);
-      height: 12px;
-      border-radius: 999px;
-      border: 1px solid var(--stroke);
-      background: linear-gradient(to right, #3b82f6, #f59e0b);
-    }
-    #legend .minmax {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      white-space: nowrap;
-    }
-    #legend .tag {
-      color: var(--text);
-      font-weight: 600;
-      font-size: 11px;
-      border: 1px solid var(--stroke);
-      padding: 2px 8px;
-      border-radius: 999px;
-      background: rgba(255,255,255,0.03);
+    #legend{
+      margin-top: 0;
     }
 
     /* Day slider control */
@@ -2175,7 +2136,7 @@ g.city.pin-disabled circle.city-dot{
       --cta-bg-hover: #ff7c45;
       --hud-bg: rgba(12, 24, 44, 0.9);
       --header-height: 96px;
-      --map-wrap-vpad: 10px;
+      --map-wrap-vpad: 8px;
     }
 
     body{
@@ -2380,70 +2341,168 @@ g.city.pin-disabled circle.city-dot{
     }
 
     #mapWrap{
-      padding: var(--map-wrap-vpad) 10px 14px;
+      padding: var(--map-wrap-vpad) 10px 10px;
     }
     #map{
       border-radius: 16px;
-      height: min(calc(100dvh - var(--header-height) - (var(--map-wrap-vpad) * 2) - 72px), 760px);
+      height: min(calc(100dvh - var(--header-height) - (var(--map-wrap-vpad) * 2) - 42px), 820px);
     }
     #mapHud.mapHudFooter{
-      position: relative;
-      z-index: 5;
-      display: grid;
-      gap: 8px;
-      max-width: min(640px, 92%);
-      margin-top: 8px;
-      padding: 10px 12px;
-      border-radius: 14px;
-      border: 1px solid rgba(255,255,255,0.14);
-      background: rgba(12, 24, 44, 0.84);
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
-      box-shadow: 0 12px 30px rgba(0,0,0,0.3);
-    }
-    #mapHud.mapHudFooter::before{
-      content: "";
       position: absolute;
-      left: 12px;
-      right: 12px;
-      top: 0;
-      height: 1px;
-      border-radius: 999px;
-      background: linear-gradient(to right, rgba(255,255,255,0.06), rgba(255,255,255,0.32), rgba(255,255,255,0.06));
+      left: var(--legend-inset-left);
+      bottom: var(--legend-inset-bottom);
+      z-index: 8;
+      display: grid;
+      gap: var(--legend-status-gap);
+      width: var(--legend-card-width);
       pointer-events: none;
     }
-    #status,
-    #legend{
-      margin-top: 0;
-      font-size: 12px;
-      line-height: 1.3;
+    .legendStatusChip,
+    .legendCard{
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(11, 24, 42, 0.9);
+      box-shadow: 0 12px 28px rgba(4,10,22,0.34);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
     }
-    #status{
-      color: rgba(232,234,240,0.9);
+    .legendStatusChip{
+      display: flex;
+      align-items: center;
       gap: 9px;
+      width: fit-content;
+      max-width: min(100%, 272px);
+      min-height: 36px;
+      padding: 8px 10px;
+      color: rgba(244,247,252,0.94);
+      font-size: 12px;
+      line-height: 1.2;
+      pointer-events: none;
+      opacity: 1;
+      transform: translateY(0);
+      transition: opacity var(--legend-status-duration) ease, transform var(--legend-status-duration) ease;
     }
-    #status .dot{
-      width: 9px;
-      height: 9px;
-      background: #3fb8ff;
+    .legendStatusChip.is-hidden{
+      opacity: 0;
+      transform: translateY(6px);
+      visibility: hidden;
     }
-    .progressTrack{
-      width: 160px;
-      height: 7px;
-      background: rgba(255,255,255,0.06);
+    .legendStatusChip[data-status-type="success"]{
+      border-color: rgba(74,222,128,0.22);
     }
-    #legend{
-      color: rgba(232,234,240,0.82);
+    .legendStatusChip[data-status-type="warning"]{
+      border-color: rgba(251,191,36,0.26);
     }
-    #legend .tag{
-      background: rgba(255,255,255,0.07);
-      color: #f3f7ff;
+    .legendStatusChip[data-status-type="error"]{
+      border-color: rgba(248,113,113,0.3);
+    }
+    .legendStatusIcon{
+      width: 16px;
+      height: 16px;
+      flex: 0 0 16px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.08);
+      color: #a5dcff;
+      position: relative;
+    }
+    .legendStatusIcon::before{
+      content: "i";
+      font-size: 11px;
+      font-weight: 800;
+      line-height: 1;
+    }
+    .legendStatusChip[data-status-type="loading"] .legendStatusIcon::before{
+      content: "";
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      border: 1.6px solid rgba(165,220,255,0.32);
+      border-top-color: #7dd3fc;
+      animation: legendSpin 0.8s linear infinite;
+    }
+    .legendStatusChip[data-status-type="success"] .legendStatusIcon{
+      color: #86efac;
+    }
+    .legendStatusChip[data-status-type="success"] .legendStatusIcon::before{
+      content: "✓";
+      font-size: 11px;
+    }
+    .legendStatusChip[data-status-type="warning"] .legendStatusIcon{
+      color: #fcd34d;
+    }
+    .legendStatusChip[data-status-type="warning"] .legendStatusIcon::before{
+      content: "!";
+      font-size: 12px;
+    }
+    .legendStatusChip[data-status-type="error"] .legendStatusIcon{
+      color: #fda4af;
+    }
+    .legendStatusChip[data-status-type="error"] .legendStatusIcon::before{
+      content: "×";
+      font-size: 12px;
+    }
+    .legendStatusChip[data-progress-visible="true"] .progressTrack{
+      display: inline-flex;
+    }
+    #statusText{
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .legendCard{
+      display: grid;
+      gap: 8px;
+      min-width: 0;
+      padding: var(--legend-card-padding);
+      color: rgba(232,238,247,0.9);
+      pointer-events: none;
+    }
+    .legendContextRow,
+    .legendScaleRow{
+      display: grid;
+      align-items: center;
+    }
+    .legendContextRow{
+      grid-template-columns: auto auto 1fr;
+      gap: 6px;
+      font-size: 11px;
       font-weight: 700;
+      letter-spacing: 0.16px;
+      color: rgba(241,245,255,0.92);
+    }
+    .legendDivider{
+      color: rgba(184,198,221,0.5);
+    }
+    #legendMetric{
+      color: rgba(185,203,228,0.76);
+      text-transform: none;
+    }
+    .legendScaleRow{
+      grid-template-columns: auto minmax(92px, 1fr) auto;
+      gap: 10px;
+      color: rgba(220,228,240,0.84);
+      font-size: 11px;
+      font-weight: 600;
     }
     #legend .bar{
-      width: min(280px, 52vw);
-      height: 10px;
-      border-color: rgba(255,255,255,0.2);
+      width: 100%;
+      min-width: 0;
+      height: 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.14);
+      background: linear-gradient(to right, #3b82f6, #f59e0b);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+    }
+    #legendMin,
+    #legendMax{
+      white-space: nowrap;
+    }
+
+    @keyframes legendSpin{
+      to{ transform: rotate(360deg); }
     }
 
     @media (max-width: 1200px){
@@ -2525,20 +2584,16 @@ g.city.pin-disabled circle.city-dot{
       #mapHud.mapHudFooter{
         position: absolute;
         left: 16px;
-        right: 74px;
+        right: auto;
         bottom: 18px;
-        max-width: none;
-        margin-top: 0;
-        padding: 9px 10px;
-        gap: 6px;
+        width: min(240px, calc(100vw - 104px));
         z-index: 8;
       }
-      #mapHud.mapHudFooter::before{
-        left: 10px;
-        right: 10px;
+      .legendStatusChip{
+        max-width: min(100%, 240px);
       }
-      #legend .bar{
-        width: min(170px, 42vw);
+      .legendCard{
+        padding: 9px 10px;
       }
       .sub{
         display: none;

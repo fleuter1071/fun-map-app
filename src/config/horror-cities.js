@@ -12,5 +12,10 @@ window.HORROR_CITIES_CONFIG = [
   { city: "Salem", state: "MA", lat: 42.5195, lon: -70.8967, pop: 44300, movie: "Hocus Pocus", movieYear: 1993 },
   { city: "Point Pleasant", state: "WV", lat: 38.8445, lon: -82.1371, pop: 3900, movie: "The Mothman Prophecies", movieYear: 2002 },
   { city: "Covington", state: "GA", lat: 33.5968, lon: -83.8602, pop: 15200, movie: "Friday the 13th Part VI: Jason Lives", movieYear: 1986 },
-  { city: "Transylvania", state: "LA", lat: 32.5538, lon: -91.2459, pop: 800, movie: "Dracula", movieYear: 1931 }
+  { city: "Transylvania", state: "LA", lat: 32.5538, lon: -91.2459, pop: 800, movie: "Dracula", movieYear: 1931 },
+  { city: "Bangor", state: "ME", lat: 44.8012, lon: -68.7778, pop: 31750, movie: "It", movieYear: 1990 },
+  { city: "Washington", state: "DC", lat: 38.9072, lon: -77.0369, pop: 689545, movie: "The Exorcist", movieYear: 1973 },
+  { city: "Chicago", state: "IL", lat: 41.8781, lon: -87.6298, pop: 2746388, movie: "Candyman", movieYear: 1992 },
+  { city: "Austin", state: "TX", lat: 30.2672, lon: -97.7431, pop: 979882, movie: "The Texas Chain Saw Massacre", movieYear: 1974 },
+  { city: "Seattle", state: "WA", lat: 47.6062, lon: -122.3321, pop: 749256, movie: "The Ring", movieYear: 2002 }
 ];

@@ -187,17 +187,21 @@
         </div>
         <div id="pinnedList"></div>
       </div>
-      <div id="mapHud" class="mapHudFooter" aria-live="polite">
-        <div id="status">
-          <span class="dot"></span>
+      <div id="mapHud" class="mapHudFooter">
+        <div id="legendStatus" class="legendStatusChip is-hidden" role="status" aria-live="polite" aria-atomic="true">
+          <span class="legendStatusIcon" id="legendStatusIcon" aria-hidden="true"></span>
           <span id="statusText">Loading map...</span>
           <div class="progressTrack" id="progressTrack" aria-hidden="true">
             <div class="progressFill" id="progressFill"></div>
           </div>
         </div>
-        <div id="legend" style="display:none;">
-          <span class="tag" id="legendTag">Live</span>
-          <div class="minmax">
+        <div id="legend" class="legendCard" style="display:none;" aria-live="polite">
+          <div class="legendContextRow">
+            <span id="legendTag">Sun 6 PM</span>
+            <span class="legendDivider" aria-hidden="true">•</span>
+            <span id="legendMetric">Temp</span>
+          </div>
+          <div class="legendScaleRow">
             <span id="legendMin"></span>
             <div class="bar" id="legendBar"></div>
             <span id="legendMax"></span>
