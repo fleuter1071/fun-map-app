@@ -70,10 +70,34 @@ async function start(){
 }
 function startApp(){
   const CLUSTER_DOT_RADIUS = 12;
+  const MARKER_SYSTEM = {
+    baseRadius: 4.5,
+    promotedRadius: 5.1,
+    focusRadius: 6.2,
+    promotedBadge: { w: 72, h: 24, pad: 4 },
+    focusBadge: { w: 132, h: 36, pad: 6 },
+    hoverFocusBadge: { w: 72, h: 24, pad: 6 },
+    promotionCapByZoom: [
+      { maxK: 1.35, cap: 8 },
+      { maxK: 2.2, cap: 14 },
+      { maxK: 3.5, cap: 18 },
+      { maxK: 99, cap: 26 }
+    ]
+  };
   let clusterState = {
     zoomK: 1,
     clusters: [],
     cityToCluster: new Map()
+  };
+  let markerState = {
+    zoomK: 1,
+    byKey: new Map(),
+    promotedKeys: new Set(),
+    focusKeys: new Set()
+  };
+  let promotedSelectionCache = {
+    signature: "",
+    orderedKeys: []
   };
 
   function getWeatherIconType(code) {
@@ -146,6 +170,14 @@ function startApp(){
       const city = cityAccessor(d);
       const icon = d3.select(this).select("g.weather-icon");
       if (icon.empty()) return;
+      if(city && typeof cityKey === "function"){
+        const key = cityKey(city);
+        const tier = markerState?.byKey?.get?.(key)?.tier || "base";
+        if(tier !== "base"){
+          icon.style("display", "none");
+          return;
+        }
+      }
       const wx = city?._wx;
       const code = wx?.hourly?.code?.[selectedHourIndex];
       const type = (wx && !city?._wxError) ? getWeatherIconType(code) : null;
@@ -266,9 +298,14 @@ function startApp(){
   function setHoverState(city, event){
     _hoverCityKey = city ? cityKey(city) : null;
     if(event && event.clientX != null && event.clientY != null) _lastTooltipPt = {clientX: event.clientX, clientY: event.clientY};
+    refreshMarkerSystem(lastZoomTransform?.k || 1);
   }
 
-  function clearHoverState(){ _hoverCityKey = null; _lastTooltipPt = null; }
+  function clearHoverState(){
+    _hoverCityKey = null;
+    _lastTooltipPt = null;
+    refreshMarkerSystem(lastZoomTransform?.k || 1);
+  }
 
   function refreshTooltipIfHovering(city){
     if(!city) return;
@@ -1276,6 +1313,7 @@ function startApp(){
   function applyFocusStyles(){
     if(!gCities) return;
     gCities.selectAll("g.city").classed("focused", d => cityKey(d) === focusedKey);
+    refreshMarkerSystem(lastZoomTransform?.k || 1);
   }
 
   function applyPinsFromKeys(keys){
@@ -1320,8 +1358,8 @@ function startApp(){
   const gSurface = gRoot.append("g").attr("class", "surface").attr("clip-path", "url(#land-clip)");
   const gBorders = gRoot.append("g").attr("class", "borders");
   const gRifts = gRoot.append("g").attr("class", "rift-overlay").attr("clip-path", "url(#land-clip)");
-  const gCities = gRoot.append("g").attr("class", "cities");
   const gClusters = gRoot.append("g").attr("class", "clusters");
+  const gCities = gRoot.append("g").attr("class", "cities");
   const gUserLocation = gRoot.append("g").attr("class", "user-location-layer");
 
   let projection = d3.geoAlbersUsa();
@@ -2106,7 +2144,6 @@ function startApp(){
     const disablePins = isPinningDisabledMode();
     gCities.selectAll("g.city").classed("pin-disabled", disablePins);
     gCities.selectAll("g.city").classed("pinned", isPinned);
-    gCities.selectAll("g.city circle.city-dot").attr("r", d => isPinned(d) ? 6.3 : 4.85).style("stroke-width", d => isPinned(d) ? 2.2 : 0.8).style("stroke", d => isPinned(d) ? "rgba(255,255,255,0.9)" : "rgba(0,0,0,0.35)");
     updateClusterLayout(lastZoomTransform?.k || 1);
   }
 
@@ -2175,21 +2212,116 @@ function startApp(){
     return { clusters, cityToCluster };
   }
 
-  function updateClusterLayout(zoomK = 1) {
-    if (!gCities || !gClusters) return;
-    clusterState.zoomK = zoomK;
-    const built = buildCityClusters(zoomK);
-    clusterState.clusters = built.clusters;
-    clusterState.cityToCluster = built.cityToCluster;
+  function getInteractionFocusKeys(){
+    const focusKeys = new Set();
+    if(_hoverCityKey) focusKeys.add(_hoverCityKey);
+    for(const key of pinned.keys()) focusKeys.add(key);
+    return focusKeys;
+  }
 
+  function markerPromotionCap(zoomK = 1){
+    const k = Math.max(1, Number(zoomK) || 1);
+    const match = MARKER_SYSTEM.promotionCapByZoom.find((r) => k <= r.maxK);
+    return match ? match.cap : 12;
+  }
+
+  function buildUiAvoidZones(){
+    const zones = [];
+    if(statusEl){
+      zones.push({ x: 8, y: Math.max(8, mapHeight - 74), w: Math.min(560, mapWidth * 0.62), h: 66 });
+    }
+    if(pinnedPanelEl && pinnedPanelEl.style.display !== "none"){
+      const panelWidth = pinnedPanelEl.offsetWidth || 300;
+      zones.push({ x: Math.max(0, mapWidth - panelWidth - 18), y: 8, w: Math.min(panelWidth + 16, mapWidth), h: mapHeight - 16 });
+    }
+    return zones;
+  }
+
+  function getViewportWorldBounds(zoomK = 1){
+    const t = lastZoomTransform || d3.zoomIdentity;
+    const k = Math.max(1, Number(zoomK) || Number(t.k) || 1);
+    const x = Number.isFinite(t.x) ? t.x : 0;
+    const y = Number.isFinite(t.y) ? t.y : 0;
+    return {
+      minX: (-x) / k,
+      maxX: (mapWidth - x) / k,
+      minY: (-y) / k,
+      maxY: (mapHeight - y) / k
+    };
+  }
+
+  function scorePromotedCities(cities, zoomK = 1, viewport = null){
+    const points = cities.map((city) => ({ city, key: cityKey(city), x: city._xy[0], y: city._xy[1] }));
+    const maxPop = Math.max(1, ...points.map((p) => Number(p.city.pop) || 1));
+    const minPop = Math.min(...points.map((p) => Math.max(1, Number(p.city.pop) || 1)));
+    const centerX = viewport ? (viewport.minX + viewport.maxX) / 2 : (mapWidth / 2);
+    const centerY = viewport ? (viewport.minY + viewport.maxY) / 2 : (mapHeight / 2);
+    const diag = Math.hypot(mapWidth, mapHeight) || 1;
+    return points.map((p) => {
+      const pop = Math.max(1, Number(p.city.pop) || 1);
+      const popNorm = (Math.log(pop) - Math.log(minPop)) / Math.max(0.0001, (Math.log(maxPop) - Math.log(minPop)));
+      let nearest = Infinity;
+      for(const other of points){
+        if(other.key === p.key) continue;
+        const d = Math.hypot(other.x - p.x, other.y - p.y);
+        if(d < nearest) nearest = d;
+      }
+      const spacingNorm = Math.max(0, Math.min(1, (nearest - 24) / 110));
+      const centerBias = 1 - Math.min(1, Math.hypot(p.x - centerX, p.y - centerY) / diag);
+      const zoomBias = Math.max(0, Math.min(1, (zoomK - 1) / 3));
+      return {
+        city: p.city,
+        key: p.key,
+        score: (popNorm * 0.58) + (spacingNorm * 0.28) + (centerBias * 0.08) + (zoomBias * 0.06)
+      };
+    }).sort((a, b) => b.score - a.score);
+  }
+
+  function buildPromotionSignature(zoomK, viewport, candidateKeys){
+    const t = lastZoomTransform || d3.zoomIdentity;
+    const zoomBucket = Math.round((Number(zoomK) || 1) * 20) / 20;
+    const panXBucket = Math.round((Number(t.x) || 0) / 60);
+    const panYBucket = Math.round((Number(t.y) || 0) / 60);
+    const viewBucket = [
+      Math.round(viewport.minX / 18),
+      Math.round(viewport.maxX / 18),
+      Math.round(viewport.minY / 18),
+      Math.round(viewport.maxY / 18)
+    ].join(":");
+    return `z:${zoomBucket}|p:${panXBucket},${panYBucket}|v:${viewBucket}|k:${candidateKeys.join(",")}`;
+  }
+
+  function rectsOverlap(a, b, pad = 0){
+    return !(a.x + a.w + pad <= b.x || b.x + b.w + pad <= a.x || a.y + a.h + pad <= b.y || b.y + b.h + pad <= a.y);
+  }
+
+  function overlapArea(a, b){
+    const ix = Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x));
+    const iy = Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+    return ix * iy;
+  }
+
+  function candidateRects(anchorX, anchorY, w, h, gap = 6){
+    return [
+      { pos: "top-right", x: anchorX + gap, y: anchorY - h - gap },
+      { pos: "top-left", x: anchorX - w - gap, y: anchorY - h - gap },
+      { pos: "right", x: anchorX + gap, y: anchorY - (h / 2) },
+      { pos: "left", x: anchorX - w - gap, y: anchorY - (h / 2) },
+      { pos: "bottom-right", x: anchorX + gap, y: anchorY + gap },
+      { pos: "bottom-left", x: anchorX - w - gap, y: anchorY + gap },
+      { pos: "top", x: anchorX - (w / 2), y: anchorY - h - gap },
+      { pos: "bottom", x: anchorX - (w / 2), y: anchorY + gap }
+    ];
+  }
+
+  function renderClusterMarkers(clusters){
     const clusterSel = gClusters.selectAll("g.cluster")
-      .data(clusterState.clusters, (d) => d.id)
+      .data(clusters, (d) => d.id)
       .join(
         (enter) => {
           const g = enter.append("g").attr("class", "cluster");
           g.append("circle").attr("class", "cluster-hit").attr("r", 18);
           g.append("circle").attr("class", "cluster-dot").attr("r", CLUSTER_DOT_RADIUS);
-          appendWeatherIconGlyph(g, "cluster-weather-icon").attr("transform", "translate(-2,-7) scale(0.9)");
           g.append("text").attr("class", "cluster-count").attr("dy", 4).attr("text-anchor", "middle");
           g.on("click", (event, d) => {
             event.stopPropagation();
@@ -2205,15 +2337,272 @@ function startApp(){
         (update) => update,
         (exit) => exit.remove()
       );
-
     clusterSel.attr("transform", (d) => `translate(${d.cx},${d.cy})`);
     clusterSel.select("text.cluster-count").text((d) => d.count);
     updateWeatherIconsForSelection(clusterSel, (d) => d.representative);
+  }
 
-    gCities.selectAll("g.city")
+  function placePromotedMarkers(cities, scoredCandidates, focusPlan, zoomK = 1){
+    const byKey = new Map();
+    const focusSet = new Set();
+    const promotedSet = new Set();
+    const occupied = [];
+    const uiZones = buildUiAvoidZones();
+    const mapBounds = { x: 8, y: 8, w: Math.max(0, mapWidth - 16), h: Math.max(0, mapHeight - 16) };
+    const candidateByKey = new Map(cities.map((c) => [cityKey(c), c]));
+    const zoom = Math.max(1, Number(zoomK) || 1);
+
+    function placeCity(city, tier, strict = true, focusKind = "pinned"){
+      const key = cityKey(city);
+      const [ax, ay] = city._xy;
+      const spec = tier === "focus"
+        ? (focusKind === "hover" ? MARKER_SYSTEM.hoverFocusBadge : MARKER_SYSTEM.focusBadge)
+        : MARKER_SYSTEM.promotedBadge;
+      const candidates = candidateRects(ax, ay, spec.w, spec.h, tier === "focus" ? 8 : 6);
+      let best = null;
+      let bestPenalty = Infinity;
+
+      for(const c of candidates){
+        const rect = { x: c.x, y: c.y, w: spec.w, h: spec.h, pos: c.pos };
+        const outside = rect.x < mapBounds.x || rect.y < mapBounds.y || (rect.x + rect.w) > (mapBounds.x + mapBounds.w) || (rect.y + rect.h) > (mapBounds.y + mapBounds.h);
+        const overlapExisting = occupied.some((o) => rectsOverlap(rect, o, spec.pad));
+        const overlapUi = uiZones.some((z) => rectsOverlap(rect, z, 2));
+        if(!outside && !overlapExisting && !overlapUi){
+          best = rect;
+          bestPenalty = 0;
+          break;
+        }
+        if(!strict){
+          let penalty = 0;
+          if(outside){
+            const xLeft = Math.max(0, mapBounds.x - rect.x);
+            const xRight = Math.max(0, (rect.x + rect.w) - (mapBounds.x + mapBounds.w));
+            const yTop = Math.max(0, mapBounds.y - rect.y);
+            const yBottom = Math.max(0, (rect.y + rect.h) - (mapBounds.y + mapBounds.h));
+            penalty += (xLeft + xRight + yTop + yBottom) * 12;
+          }
+          for(const o of occupied) penalty += overlapArea(rect, o) * 0.9;
+          for(const z of uiZones) penalty += overlapArea(rect, z) * 0.6;
+          if(penalty < bestPenalty){
+            bestPenalty = penalty;
+            best = rect;
+          }
+        }
+      }
+      if(!best) return false;
+      occupied.push(best);
+      byKey.set(key, {
+        tier,
+        pos: best.pos,
+        offsetX: (best.x - ax) / zoom,
+        offsetY: (best.y - ay) / zoom,
+        invScale: 1 / zoom,
+        width: spec.w,
+        height: spec.h,
+        focusKind
+      });
+      if(tier === "focus") focusSet.add(key); else promotedSet.add(key);
+      return true;
+    }
+
+    const pinnedFocusPlan = focusPlan.filter((f) => f.kind !== "hover");
+    const hoverFocusPlan = focusPlan.filter((f) => f.kind === "hover");
+
+    for(const focusItem of pinnedFocusPlan){
+      const city = candidateByKey.get(focusItem.key);
+      if(Array.isArray(city?._xy)) placeCity(city, "focus", false, focusItem.kind);
+    }
+
+    const cap = markerPromotionCap(zoomK);
+    for(const entry of scoredCandidates){
+      if(promotedSet.size >= cap) break;
+      const city = entry.city;
+      const key = entry.key;
+      if(focusSet.has(key) || !Array.isArray(city?._xy)) continue;
+      const placed = placeCity(city, "promoted", true);
+      if(!placed){
+        byKey.set(key, { tier: "base" });
+      }
+    }
+
+    for(const city of cities){
+      const key = cityKey(city);
+      if(!byKey.has(key)) byKey.set(key, { tier: "base" });
+    }
+
+    for(const focusItem of hoverFocusPlan){
+      const city = candidateByKey.get(focusItem.key);
+      if(Array.isArray(city?._xy)) placeCity(city, "focus", false, focusItem.kind);
+    }
+
+    return { byKey, promotedKeys: promotedSet, focusKeys: focusSet };
+  }
+
+  function computeMarkerStates(cities, zoomK = 1){
+    const focusKeys = getInteractionFocusKeys();
+    const hoverKey = _hoverCityKey || null;
+    const pinnedKeys = new Set(Array.from(pinned.keys()));
+    const focusPlan = [];
+    for(const key of pinnedKeys){
+      focusPlan.push({ key, kind: "pinned" });
+    }
+    if(hoverKey){
+      focusPlan.push({ key: hoverKey, kind: "hover" });
+    }
+    const viewport = getViewportWorldBounds(zoomK);
+    const viewportPad = 24 / Math.max(1, zoomK);
+    const visible = cities.filter((city) => {
+      const key = cityKey(city);
+      if(!Array.isArray(city?._xy)) return false;
+      const [x, y] = city._xy;
+      const inView = x >= (viewport.minX - viewportPad) && x <= (viewport.maxX + viewportPad) && y >= (viewport.minY - viewportPad) && y <= (viewport.maxY + viewportPad);
+      if(!inView && !focusKeys.has(key)) return false;
+      if(clusterState.cityToCluster.has(key) && !focusKeys.has(key)) return false;
+      return true;
+    });
+    const promotedPool = cities.filter((city) => {
+      const key = cityKey(city);
+      if(!Array.isArray(city?._xy)) return false;
+      if(pinnedKeys.has(key)) return false;
+      if(clusterState.cityToCluster.has(key)) return false;
+      const [x, y] = city._xy;
+      return x >= (viewport.minX - viewportPad) && x <= (viewport.maxX + viewportPad) && y >= (viewport.minY - viewportPad) && y <= (viewport.maxY + viewportPad);
+    });
+    const poolByKey = new Map(promotedPool.map((city) => [cityKey(city), city]));
+    const candidateKeys = Array.from(poolByKey.keys()).sort();
+    const signature = buildPromotionSignature(zoomK, viewport, candidateKeys);
+    let scored;
+    if(promotedSelectionCache.signature === signature){
+      scored = promotedSelectionCache.orderedKeys
+        .map((key) => poolByKey.get(key))
+        .filter(Boolean)
+        .map((city) => ({ city, key: cityKey(city), score: 0 }));
+    } else {
+      scored = scorePromotedCities(promotedPool, zoomK, viewport);
+      promotedSelectionCache.signature = signature;
+      promotedSelectionCache.orderedKeys = scored.map((s) => s.key);
+    }
+    const placed = placePromotedMarkers(visible, scored, focusPlan, zoomK);
+    markerState = {
+      zoomK,
+      byKey: placed.byKey,
+      promotedKeys: placed.promotedKeys,
+      focusKeys: placed.focusKeys
+    };
+    return markerState;
+  }
+
+  function renderBaseMarkers(citySel, state){
+    citySel
       .classed("is-clustered", (d) => clusterState.cityToCluster.has(cityKey(d)))
-      .style("display", (d) => clusterState.cityToCluster.has(cityKey(d)) ? "none" : null);
+      .style("display", (d) => {
+        const key = cityKey(d);
+        if(clusterState.cityToCluster.has(key) && !state.focusKeys.has(key)) return "none";
+        return null;
+      });
 
+    citySel.each(function(d){
+      const key = cityKey(d);
+      const tier = state.byKey.get(key)?.tier || "base";
+      const sel = d3.select(this);
+      sel.classed("marker-base", tier === "base")
+        .classed("marker-promoted-city", tier === "promoted")
+        .classed("marker-focus-city", tier === "focus");
+
+      const radius = tier === "focus"
+        ? MARKER_SYSTEM.focusRadius
+        : (tier === "promoted" ? MARKER_SYSTEM.promotedRadius : MARKER_SYSTEM.baseRadius);
+      sel.select("circle.city-dot").attr("r", radius);
+      sel.select("circle.hover-ring").attr("r", radius * 1.03);
+      sel.select("g.city-weather-icon")
+        .style("display", tier === "base" ? null : "none")
+        .style("opacity", tier === "base" ? 0.82 : 0);
+    });
+  }
+
+  function renderPromotedMarkers(citySel, state){
+    citySel.each(function(d){
+      const key = cityKey(d);
+      const marker = state.byKey.get(key);
+      const promoted = d3.select(this).select("g.marker-promoted");
+      if(!marker || marker.tier !== "promoted"){
+        promoted.style("display", "none");
+        return;
+      }
+      const snap = getSelectedWeatherSnapshot(d?._wx);
+      const temp = (snap?.temp != null && isFinite(snap.temp)) ? `${Math.round(snap.temp)}°` : "—";
+      const cond = wxCodeToIconLabel(snap?.code);
+      promoted
+        .style("display", null)
+        .attr("transform", `translate(${marker.offsetX},${marker.offsetY}) scale(${marker.invScale})`)
+        .attr("data-pos", marker.pos);
+      promoted.select("text.promoted-temp").text(temp);
+      promoted.select("text.promoted-icon").text(cond.icon || "");
+    });
+  }
+
+  function renderFocusMarkers(citySel, state){
+    citySel.each(function(d){
+      const key = cityKey(d);
+      const marker = state.byKey.get(key);
+      const focus = d3.select(this).select("g.marker-focus");
+      if(!marker || marker.tier !== "focus"){
+        focus.style("display", "none");
+        return;
+      }
+      const snap = getSelectedWeatherSnapshot(d?._wx);
+      const temp = (snap?.temp != null && isFinite(snap.temp)) ? `${Math.round(snap.temp)}°` : "—";
+      const cond = wxCodeToIconLabel(snap?.code);
+      const isHover = marker.focusKind === "hover";
+      focus
+        .style("display", null)
+        .classed("is-hover-focus", isHover)
+        .classed("is-pinned-focus", !isHover)
+        .attr("transform", `translate(${marker.offsetX},${marker.offsetY}) scale(${marker.invScale})`)
+        .attr("data-pos", marker.pos);
+      focus.select("rect.focus-badge")
+        .attr("width", marker.width || MARKER_SYSTEM.focusBadge.w)
+        .attr("height", marker.height || MARKER_SYSTEM.focusBadge.h);
+      focus.select("text.focus-city")
+        .style("display", isHover ? "none" : null)
+        .text(isHover ? "" : `${d.city}, ${d.state}`);
+      focus.select("text.focus-temp")
+        .attr("x", 8)
+        .attr("y", isHover ? 17 : 29);
+      focus.select("text.focus-icon")
+        .attr("x", (marker.width || MARKER_SYSTEM.focusBadge.w) - 12)
+        .attr("y", isHover ? 17 : 29);
+      focus.select("text.focus-temp").text(temp);
+      focus.select("text.focus-icon").text(cond.icon || "");
+    });
+  }
+
+  function applyMarkerZOrder(citySel, state){
+    const rank = (d) => {
+      const tier = state.byKey.get(cityKey(d))?.tier || "base";
+      return tier === "focus" ? 2 : (tier === "promoted" ? 1 : 0);
+    };
+    citySel.sort((a, b) => d3.ascending(rank(a), rank(b)));
+  }
+
+  function refreshMarkerSystem(zoomK = 1){
+    const citySel = gCities.selectAll("g.city");
+    if(citySel.empty()) return;
+    const state = computeMarkerStates(activeCities, zoomK);
+    renderBaseMarkers(citySel, state);
+    renderPromotedMarkers(citySel, state);
+    renderFocusMarkers(citySel, state);
+    applyMarkerZOrder(citySel, state);
+  }
+
+  function updateClusterLayout(zoomK = 1) {
+    if (!gCities || !gClusters) return;
+    clusterState.zoomK = zoomK;
+    const built = buildCityClusters(zoomK);
+    clusterState.clusters = built.clusters;
+    clusterState.cityToCluster = built.cityToCluster;
+    renderClusterMarkers(clusterState.clusters);
+    refreshMarkerSystem(zoomK);
     if (_hoverCityKey && clusterState.cityToCluster.has(_hoverCityKey)) hideTooltip();
   }
 
@@ -2222,9 +2611,17 @@ function startApp(){
       setStatus("Pin cards are disabled for Coldest Day mode (hover only).");
       return;
     }
-    const k = cityKey(d); focusedKey = k;
-    if(pinned.has(k)) pinned.delete(k);
-    else { pinned.delete(k); pinned.set(k, d); ensureCensus(d); ensureAQI(d); }
+    const k = cityKey(d);
+    if(pinned.has(k)){
+      pinned.delete(k);
+      if(focusedKey === k) focusedKey = null;
+    } else {
+      pinned.delete(k);
+      pinned.set(k, d);
+      focusedKey = k;
+      ensureCensus(d);
+      ensureAQI(d);
+    }
     savePinned(); renderPinnedPanel(); updatePinnedStyles(); applyFocusStyles(); schedulePermalinkUpdate();
   }
 
@@ -2309,6 +2706,7 @@ function startApp(){
 
     updateWeatherFX();
     updateSurfaceOverlay(!!animated);
+    refreshMarkerSystem(lastZoomTransform?.k || 1);
   }
 
   function updateWeatherFX(){
@@ -2756,6 +3154,17 @@ function startApp(){
             openMemoryJournal(key);
           });
         appendWeatherIconGlyph(g, "city-weather-icon");
+
+        const promotedBadge = g.append("g").attr("class", "marker-promoted").style("display", "none");
+        promotedBadge.append("rect").attr("class", "marker-badge promoted-badge").attr("rx", 7).attr("ry", 7).attr("width", MARKER_SYSTEM.promotedBadge.w).attr("height", MARKER_SYSTEM.promotedBadge.h);
+        promotedBadge.append("text").attr("class", "promoted-temp").attr("x", 8).attr("y", 16);
+        promotedBadge.append("text").attr("class", "promoted-icon").attr("x", MARKER_SYSTEM.promotedBadge.w - 12).attr("y", 16).attr("text-anchor", "middle");
+
+        const focusBadge = g.append("g").attr("class", "marker-focus").style("display", "none");
+        focusBadge.append("rect").attr("class", "marker-badge focus-badge").attr("rx", 9).attr("ry", 9).attr("width", MARKER_SYSTEM.focusBadge.w).attr("height", MARKER_SYSTEM.focusBadge.h);
+        focusBadge.append("text").attr("class", "focus-city").attr("x", 8).attr("y", 13);
+        focusBadge.append("text").attr("class", "focus-temp").attr("x", 8).attr("y", 29);
+        focusBadge.append("text").attr("class", "focus-icon").attr("x", MARKER_SYSTEM.focusBadge.w - 12).attr("y", 29).attr("text-anchor", "middle");
 
         g.on("mouseenter", (event, d) => { if(isTouchContext(event)) return; animateHoverRing(d); showTooltip(event, d); })
          .on("mousemove", (event) => { if(isTouchContext(event)) return; moveTooltip(event); })

@@ -526,10 +526,89 @@
     .city-dot {
       fill: rgba(148,163,184,0.35);
       stroke: rgba(255,255,255,0.95);
-      stroke-width: 1.5;
+      stroke-width: 1.15;
       paint-order: stroke fill;
       vector-effect: non-scaling-stroke;
-      opacity: 0.95;
+      opacity: 0.9;
+      transition: r 160ms ease, stroke-width 160ms ease, opacity 160ms ease, filter 180ms ease;
+    }
+    g.city.marker-base .city-dot{
+      opacity: 0.82;
+      stroke: rgba(255,255,255,0.78);
+    }
+    g.city.marker-promoted-city .city-dot{
+      opacity: 0.96;
+      stroke: rgba(255,255,255,0.9);
+      stroke-width: 1.35;
+    }
+    g.city.marker-focus-city .city-dot{
+      opacity: 1;
+      stroke: rgba(255,255,255,0.98);
+      stroke-width: 1.75;
+      filter: drop-shadow(0 1px 2px rgba(8,15,28,0.45));
+    }
+    .city-weather-icon{
+      opacity: 0.78;
+      transition: opacity 140ms ease;
+    }
+    g.city.marker-promoted-city .city-weather-icon,
+    g.city.marker-focus-city .city-weather-icon{
+      opacity: 0;
+    }
+
+    .marker-promoted,
+    .marker-focus{
+      pointer-events: none;
+      transition: opacity 160ms ease;
+    }
+    .marker-badge{
+      vector-effect: non-scaling-stroke;
+      paint-order: stroke fill;
+    }
+    .promoted-badge{
+      fill: rgba(20,34,54,0.86);
+      stroke: rgba(120,145,178,0.7);
+      stroke-width: 1;
+      filter: drop-shadow(0 1px 2px rgba(4,10,20,0.24));
+    }
+    .promoted-temp{
+      fill: #dce6f6;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.2px;
+    }
+    .promoted-icon{
+      fill: #b7c8e4;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .focus-badge{
+      fill: rgba(13,24,40,0.94);
+      stroke: rgba(125,211,252,0.86);
+      stroke-width: 1.2;
+      filter: drop-shadow(0 2px 4px rgba(3,10,21,0.32));
+    }
+    .focus-city{
+      fill: #e8f1ff;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.18px;
+    }
+    .focus-temp{
+      fill: #f8fbff;
+      font-size: 15px;
+      font-weight: 900;
+      letter-spacing: -0.15px;
+    }
+    .focus-icon{
+      fill: #d6e3fa;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .marker-focus.is-hover-focus .focus-badge{
+      fill: rgba(16,29,47,0.9);
+      stroke: rgba(145,170,204,0.72);
+      stroke-width: 1;
     }
     body[data-theme="upside-down"] .city-dot{
       fill: rgba(156,163,175,0.68);
@@ -658,21 +737,19 @@
       pointer-events: all;
     }
     g.cluster .cluster-dot{
-      fill: rgba(96,165,250,0.9);
-      stroke: rgba(255,255,255,0.9);
-      stroke-width: 1.3;
+      fill: rgba(84,105,133,0.92);
+      stroke: rgba(224,237,255,0.84);
+      stroke-width: 1.2;
       vector-effect: non-scaling-stroke;
+      filter: drop-shadow(0 1px 2px rgba(5,11,20,0.24));
     }
     g.cluster .cluster-count{
-      fill: #ffffff;
+      fill: #e5edf9;
       font-size: 10px;
       font-weight: 800;
       letter-spacing: 0.1px;
       pointer-events: none;
-      text-shadow: 0 1px 2px rgba(0,0,0,0.4);
-    }
-    g.cluster .cluster-weather-icon{
-      opacity: 0.92;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.3);
     }
     .memory-star {
       font-size: 13px;
