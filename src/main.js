@@ -339,6 +339,10 @@ function startApp(){
   const timeMachineNotice = document.getElementById("timeMachineNotice");
   const spookyThemeToggle = document.getElementById("spookyThemeToggle");
   const upsideDownToggle = document.getElementById("upsideDownToggle");
+  const upsideDownAudioRow = document.getElementById("upsideDownAudioRow");
+  const upsideDownAudioHint = document.getElementById("upsideDownAudioHint");
+  const upsideDownAudioToggle = document.getElementById("upsideDownAudioToggle");
+  const upsideDownAudioIcon = document.getElementById("upsideDownAudioIcon");
   const addCityBtn = document.getElementById("addCityBtn");
   const addCityMenuBtn = document.getElementById("addCityMenuBtn");
   const logMemoryBtn = document.getElementById("logMemoryBtn");
@@ -373,6 +377,16 @@ function startApp(){
   let historicalStartDate = null;
   let isSpookyMode = false;
   let isUpsideDownMode = false;
+  const UPSIDE_DOWN_AUDIO_SRC = "assets/audio/upside-down-theme.mp3";
+  const UPSIDE_DOWN_AUDIO_MUTED_KEY = "uswx:upsideDownAudioMuted:v1";
+  const UPSIDE_DOWN_AUDIO_ENABLED_KEY = "uswx:upsideDownAudioEnabled:v1";
+  const UPSIDE_DOWN_AUDIO_DEFAULT_VOLUME = 0.26;
+  let upsideDownAudio = null;
+  let isUpsideDownAudioMuted = false;
+  let isUpsideDownAudioEnabled = false;
+  let isUpsideDownAudioPlaying = false;
+  let isUpsideDownAudioBlocked = false;
+  let upsideDownAudioVolume = UPSIDE_DOWN_AUDIO_DEFAULT_VOLUME;
   let memoriesData = [];
   let memoriesByCity = new Map();
   let memoryJournalCityKey = null;
@@ -388,6 +402,176 @@ function startApp(){
   let userLocation = null;
   const USER_LOCATION_KEY = "userLocation:v1";
   let userLocationTagTimer = null;
+
+  function readBoolLS(key, fallback = false){
+    try {
+      const raw = localStorage.getItem(key);
+      if(raw == null) return fallback;
+      if(raw === "true") return true;
+      if(raw === "false") return false;
+      const parsed = JSON.parse(raw);
+      return typeof parsed === "boolean" ? parsed : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  function writeBoolLS(key, value){
+    try { localStorage.setItem(key, value ? "true" : "false"); } catch {}
+  }
+
+  function initUpsideDownAudio(){
+    if(upsideDownAudio) return upsideDownAudio;
+    const audio = new Audio(UPSIDE_DOWN_AUDIO_SRC);
+    audio.loop = true;
+    audio.preload = "auto";
+    audio.volume = upsideDownAudioVolume;
+    audio.muted = !!isUpsideDownAudioMuted;
+    audio.addEventListener("play", () => {
+      isUpsideDownAudioPlaying = true;
+      isUpsideDownAudioBlocked = false;
+      renderUpsideDownAudioControls();
+    });
+    audio.addEventListener("pause", () => {
+      isUpsideDownAudioPlaying = false;
+      renderUpsideDownAudioControls();
+    });
+    audio.addEventListener("ended", () => {
+      isUpsideDownAudioPlaying = false;
+      renderUpsideDownAudioControls();
+    });
+    audio.addEventListener("error", () => {
+      isUpsideDownAudioPlaying = false;
+      isUpsideDownAudioBlocked = false;
+      renderUpsideDownAudioControls();
+    });
+    upsideDownAudio = audio;
+    return audio;
+  }
+
+  function pauseUpsideDownAudio({ reset = false } = {}){
+    const audio = initUpsideDownAudio();
+    audio.pause();
+    isUpsideDownAudioPlaying = false;
+    isUpsideDownAudioBlocked = false;
+    if(reset){
+      try { audio.currentTime = 0; } catch {}
+    }
+    renderUpsideDownAudioControls();
+  }
+
+  function setUpsideDownAudioMuted(nextMuted, { persist = true } = {}){
+    isUpsideDownAudioMuted = !!nextMuted;
+    const audio = initUpsideDownAudio();
+    audio.muted = isUpsideDownAudioMuted;
+    audio.volume = upsideDownAudioVolume;
+    if(persist) writeBoolLS(UPSIDE_DOWN_AUDIO_MUTED_KEY, isUpsideDownAudioMuted);
+    renderUpsideDownAudioControls();
+  }
+
+  async function playUpsideDownAudio({ userInitiated = false, forceEnable = false } = {}){
+    if(!isUpsideDownMode) return false;
+    const audio = initUpsideDownAudio();
+    audio.loop = true;
+    audio.volume = upsideDownAudioVolume;
+    audio.muted = !!isUpsideDownAudioMuted;
+    if(forceEnable || userInitiated){
+      isUpsideDownAudioEnabled = true;
+      writeBoolLS(UPSIDE_DOWN_AUDIO_ENABLED_KEY, true);
+    }
+    try{
+      await audio.play();
+      isUpsideDownAudioPlaying = !audio.paused;
+      isUpsideDownAudioBlocked = false;
+      if(!isUpsideDownAudioMuted){
+        isUpsideDownAudioEnabled = true;
+        writeBoolLS(UPSIDE_DOWN_AUDIO_ENABLED_KEY, true);
+      }
+      renderUpsideDownAudioControls();
+      return true;
+    } catch(err){
+      isUpsideDownAudioPlaying = false;
+      isUpsideDownAudioBlocked = !userInitiated;
+      renderUpsideDownAudioControls();
+      return false;
+    }
+  }
+
+  async function enableUpsideDownAudioFromUserAction(){
+    setUpsideDownAudioMuted(false);
+    isUpsideDownAudioEnabled = true;
+    writeBoolLS(UPSIDE_DOWN_AUDIO_ENABLED_KEY, true);
+    await playUpsideDownAudio({ userInitiated: true, forceEnable: true });
+  }
+
+  function syncUpsideDownAudioWithThemeState(){
+    initUpsideDownAudio();
+    if(!isUpsideDownMode){
+      pauseUpsideDownAudio({ reset: true });
+      renderUpsideDownAudioControls();
+      return;
+    }
+    if(isUpsideDownAudioMuted){
+      pauseUpsideDownAudio({ reset: true });
+      renderUpsideDownAudioControls();
+      return;
+    }
+    if(document.hidden){
+      pauseUpsideDownAudio();
+      renderUpsideDownAudioControls();
+      return;
+    }
+    playUpsideDownAudio({ userInitiated: false, forceEnable: isUpsideDownAudioEnabled }).catch(() => {});
+  }
+
+  function renderUpsideDownAudioControls(){
+    if(upsideDownAudioRow){
+      upsideDownAudioRow.hidden = !isUpsideDownMode;
+      if(isUpsideDownMode){
+        const uiState = isUpsideDownAudioPlaying && !isUpsideDownAudioMuted
+          ? "playing"
+          : (isUpsideDownAudioBlocked ? "blocked" : (isUpsideDownAudioMuted ? "muted" : "ready"));
+        upsideDownAudioRow.dataset.audioState = uiState;
+      } else {
+        delete upsideDownAudioRow.dataset.audioState;
+      }
+    }
+    if(!isUpsideDownMode){
+      if(upsideDownAudioHint) upsideDownAudioHint.textContent = "Ambient loop ready";
+      if(upsideDownAudioIcon) upsideDownAudioIcon.textContent = "🔇";
+      if(upsideDownAudioToggle){
+        upsideDownAudioToggle.setAttribute("aria-label", "Enable Upside Down theme audio");
+        upsideDownAudioToggle.setAttribute("aria-pressed", "false");
+        upsideDownAudioToggle.disabled = true;
+      }
+      return;
+    }
+    const isAudible = isUpsideDownAudioPlaying && !isUpsideDownAudioMuted;
+    let hint = "Theme audio available";
+    let icon = "🔈";
+    let label = "Enable Upside Down theme audio";
+    if(isAudible){
+      hint = "Theme audio on";
+      icon = "🔊";
+      label = "Mute Upside Down theme audio";
+    } else if(isUpsideDownAudioBlocked){
+      hint = "Click to enable theme audio";
+      icon = "▶";
+      label = "Start Upside Down theme audio";
+    } else if(isUpsideDownAudioMuted){
+      hint = "Audio muted";
+      icon = "🔇";
+      label = "Unmute Upside Down theme audio";
+    }
+    if(upsideDownAudioHint) upsideDownAudioHint.textContent = hint;
+    if(upsideDownAudioIcon) upsideDownAudioIcon.textContent = icon;
+    if(upsideDownAudioToggle){
+      upsideDownAudioToggle.disabled = false;
+      upsideDownAudioToggle.setAttribute("aria-label", label);
+      upsideDownAudioToggle.setAttribute("aria-pressed", isAudible ? "true" : "false");
+      upsideDownAudioToggle.title = hint;
+    }
+  }
 
   function getSelectedWeatherSnapshot(wx){
     const cur = wx?.current ?? {};
@@ -1125,6 +1309,7 @@ function startApp(){
     if(upsideDownToggle) upsideDownToggle.checked = isUpsideDownMode;
     runThemeTransition(isUpsideDownMode);
     applyThemeAttribute();
+    syncUpsideDownAudioWithThemeState();
 
     // Upside Down is a visual/UX mode; do not force historical weather.
     if(timeMachineToggle){
@@ -1230,6 +1415,17 @@ function startApp(){
     upsideDownToggle.addEventListener("change", async () => {
       if (isPlaying) { isPlaying = false; if(playBtn) playBtn.textContent = "▶️"; clearInterval(playInterval); }
       await setUpsideDownMode(!!upsideDownToggle.checked);
+    });
+  }
+
+  if(upsideDownAudioToggle){
+    upsideDownAudioToggle.addEventListener("click", async () => {
+      if(!isUpsideDownMode) return;
+      if(isUpsideDownAudioPlaying && !isUpsideDownAudioMuted){
+        setUpsideDownAudioMuted(true);
+        return;
+      }
+      await enableUpsideDownAudioFromUserAction();
     });
   }
 
@@ -3506,6 +3702,17 @@ function startApp(){
     const summary = openMenu.querySelector("summary");
     if(summary) summary.focus();
   });
+  document.addEventListener("visibilitychange", () => {
+    if(document.hidden){
+      if(isUpsideDownMode) pauseUpsideDownAudio();
+      return;
+    }
+    if(isUpsideDownMode && isUpsideDownAudioEnabled && !isUpsideDownAudioMuted){
+      playUpsideDownAudio({ userInitiated: false, forceEnable: true }).catch(() => {});
+    } else {
+      renderUpsideDownAudioControls();
+    }
+  });
   populateMemoryCityOptions();
   if(memoryDateInput){
     memoryDateInput.value = isoDate(new Date());
@@ -3514,6 +3721,10 @@ function startApp(){
   setMemoryFormVisible(false);
   setMemoryJournalVisible(false);
   setAddCityModalVisible(false);
+  isUpsideDownAudioMuted = readBoolLS(UPSIDE_DOWN_AUDIO_MUTED_KEY, false);
+  isUpsideDownAudioEnabled = readBoolLS(UPSIDE_DOWN_AUDIO_ENABLED_KEY, false);
+  initUpsideDownAudio();
+  renderUpsideDownAudioControls();
 
   const _urlState = readPermalinkFromURL();
   if(_urlState){

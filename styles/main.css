@@ -1291,6 +1291,90 @@
       display:flex;
       align-items:center;
     }
+    .themeAudioRow{
+      display:grid;
+      grid-template-columns: 1fr auto;
+      align-items:center;
+      gap: 10px;
+      padding: 8px 10px;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 12px;
+      background:
+        linear-gradient(145deg, rgba(255,255,255,0.05), rgba(255,255,255,0.03));
+    }
+    .themeAudioRow[hidden]{
+      display:none;
+    }
+    .themeAudioMeta{
+      display:grid;
+      gap: 3px;
+      min-width: 0;
+    }
+    .themeAudioLabel{
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.12px;
+      color: rgba(232,234,240,0.96);
+    }
+    .themeAudioHint{
+      font-size: 10px;
+      line-height: 1.35;
+      color: rgba(232,234,240,0.64);
+    }
+    .themeAudioButton{
+      width: 34px;
+      height: 34px;
+      min-width: 34px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      padding: 0;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.08);
+    }
+    .themeAudioIcon{
+      font-size: 15px;
+      line-height: 1;
+    }
+    .themeAudioRow[data-audio-state="ready"] .themeAudioButton{
+      border-color: rgba(125,211,252,0.3);
+    }
+    .themeAudioRow[data-audio-state="playing"] .themeAudioButton{
+      border-color: rgba(125,211,252,0.66);
+      background: rgba(125,211,252,0.16);
+      box-shadow: 0 0 0 1px rgba(125,211,252,0.12), 0 0 18px rgba(56,189,248,0.12);
+    }
+    .themeAudioRow[data-audio-state="blocked"] .themeAudioButton,
+    .themeAudioRow[data-audio-state="muted"] .themeAudioButton{
+      border-color: rgba(255,255,255,0.16);
+      background: rgba(255,255,255,0.05);
+    }
+    body[data-theme="upside-down"] .themeAudioRow{
+      border-color: rgba(239,68,68,0.26);
+      background:
+        radial-gradient(circle at left center, rgba(239,68,68,0.11), transparent 58%),
+        linear-gradient(155deg, rgba(39,11,18,0.52), rgba(15,12,22,0.62));
+      box-shadow: inset 0 1px 0 rgba(34,211,238,0.07);
+    }
+    body[data-theme="upside-down"] .themeAudioLabel{
+      color: rgba(254,226,226,0.96);
+    }
+    body[data-theme="upside-down"] .themeAudioHint{
+      color: rgba(254,202,202,0.7);
+    }
+    body[data-theme="upside-down"] .themeAudioRow[data-audio-state="playing"] .themeAudioButton{
+      border-color: rgba(34,211,238,0.66);
+      background: linear-gradient(145deg, rgba(85,15,25,0.9), rgba(23,13,26,0.92));
+      box-shadow:
+        inset 0 1px 0 rgba(34,211,238,0.16),
+        0 0 0 1px rgba(239,68,68,0.16),
+        0 0 18px rgba(239,68,68,0.22);
+    }
+    body[data-theme="upside-down"] .themeAudioRow[data-audio-state="blocked"] .themeAudioButton,
+    body[data-theme="upside-down"] .themeAudioRow[data-audio-state="muted"] .themeAudioButton{
+      border-color: rgba(239,68,68,0.28);
+      background: rgba(54,18,25,0.56);
+    }
     .tmDateWrap[hidden]{
       display:none;
     }
