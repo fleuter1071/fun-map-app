@@ -1375,6 +1375,32 @@
       border-color: rgba(239,68,68,0.28);
       background: rgba(54,18,25,0.56);
     }
+    body[data-theme="spooky"] .themeAudioRow{
+      border-color: rgba(168,85,247,0.28);
+      background:
+        radial-gradient(circle at left center, rgba(245,158,11,0.12), transparent 58%),
+        linear-gradient(155deg, rgba(45,18,26,0.54), rgba(20,13,27,0.64));
+      box-shadow: inset 0 1px 0 rgba(249,115,22,0.09);
+    }
+    body[data-theme="spooky"] .themeAudioLabel{
+      color: rgba(254,243,199,0.96);
+    }
+    body[data-theme="spooky"] .themeAudioHint{
+      color: rgba(253,230,138,0.76);
+    }
+    body[data-theme="spooky"] .themeAudioRow[data-audio-state="playing"] .themeAudioButton{
+      border-color: rgba(249,115,22,0.72);
+      background: linear-gradient(145deg, rgba(66,23,24,0.92), rgba(40,18,36,0.94));
+      box-shadow:
+        inset 0 1px 0 rgba(250,204,21,0.15),
+        0 0 0 1px rgba(168,85,247,0.16),
+        0 0 18px rgba(249,115,22,0.22);
+    }
+    body[data-theme="spooky"] .themeAudioRow[data-audio-state="blocked"] .themeAudioButton,
+    body[data-theme="spooky"] .themeAudioRow[data-audio-state="muted"] .themeAudioButton{
+      border-color: rgba(168,85,247,0.32);
+      background: rgba(52,24,41,0.6);
+    }
     .tmDateWrap[hidden]{
       display:none;
     }
@@ -1758,67 +1784,67 @@
       transition: opacity 220ms ease;
     }
     body[data-theme="upside-down"] .rift-overlay{
-      opacity: 1;
+      opacity: 0.78;
     }
     .terrain-rifts .rift-zone{
-      fill: rgba(239,68,68,0.28);
-      stroke: rgba(34,211,238,0.58);
-      stroke-width: 1.9;
+      fill: rgba(239,68,68,0.16);
+      stroke: rgba(34,211,238,0.3);
+      stroke-width: 1.2;
       vector-effect: non-scaling-stroke;
-      filter: drop-shadow(0 0 14px rgba(239,68,68,0.76));
-      animation: riftZonePulse 4.9s ease-in-out infinite;
+      filter: drop-shadow(0 0 8px rgba(239,68,68,0.3));
+      animation: riftZonePulse 6.8s ease-in-out infinite;
     }
     .terrain-rifts .rift-zone.is-high{
-      fill: rgba(239,68,68,0.38);
-      stroke: rgba(34,211,238,0.74);
-      stroke-width: 2.4;
-      animation-duration: 4.1s;
+      fill: rgba(239,68,68,0.22);
+      stroke: rgba(34,211,238,0.38);
+      stroke-width: 1.45;
+      animation-duration: 5.9s;
     }
     .terrain-rifts .rift-zone.is-medium{
-      fill: rgba(239,68,68,0.19);
-      stroke: rgba(34,211,238,0.42);
-      animation-duration: 6.6s;
+      fill: rgba(239,68,68,0.12);
+      stroke: rgba(34,211,238,0.22);
+      animation-duration: 7.9s;
     }
     .terrain-rifts .rift-core{
-      fill: rgba(34,211,238,0.24);
-      stroke: rgba(252,165,165,0.74);
-      stroke-width: 1.5;
+      fill: rgba(34,211,238,0.1);
+      stroke: rgba(252,165,165,0.3);
+      stroke-width: 1.05;
       vector-effect: non-scaling-stroke;
-      filter: drop-shadow(0 0 10px rgba(34,211,238,0.72));
-      animation: riftCorePulse 3.6s ease-in-out infinite;
+      filter: drop-shadow(0 0 5px rgba(34,211,238,0.24));
+      animation: riftCorePulse 6.2s ease-in-out infinite;
     }
     .terrain-rifts .rift-core.is-high{
-      fill: rgba(34,211,238,0.2);
-      stroke-width: 1.4;
+      fill: rgba(34,211,238,0.12);
+      stroke-width: 1.12;
     }
     .terrain-rifts .rift-lightning{
       fill: none;
-      stroke: rgba(239,68,68,0.92);
-      stroke-width: 2.8;
+      stroke: rgba(239,68,68,0.22);
+      stroke-width: 1.15;
       stroke-linecap: round;
       stroke-linejoin: round;
       vector-effect: non-scaling-stroke;
-      filter: drop-shadow(0 0 8px rgba(239,68,68,0.92));
-      animation: riftLightningPulse 2.8s ease-in-out infinite;
+      filter: drop-shadow(0 0 4px rgba(239,68,68,0.18));
+      animation: riftLightningPulse 7.2s ease-in-out infinite;
     }
     .terrain-rifts .rift-lightning.is-secondary{
-      stroke: rgba(34,211,238,0.76);
-      stroke-width: 2.0;
-      animation-delay: 1.2s;
-      animation-duration: 3.7s;
+      stroke: rgba(34,211,238,0.2);
+      stroke-width: 0.9;
+      animation-delay: 2.1s;
+      animation-duration: 8.9s;
     }
     @keyframes riftZonePulse {
-      0%,100% { opacity: 0.45; transform: scale(1); }
-      50% { opacity: 1; transform: scale(1.06); }
+      0%,100% { opacity: 0.24; transform: scale(1); }
+      50% { opacity: 0.54; transform: scale(1.025); }
     }
     @keyframes riftCorePulse {
-      0%,100% { opacity: 0.38; transform: scale(1); }
-      50% { opacity: 0.98; transform: scale(1.08); }
+      0%,100% { opacity: 0.18; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(1.035); }
     }
     @keyframes riftLightningPulse {
-      0%,100% { opacity: 0.4; }
-      46% { opacity: 1; }
-      52% { opacity: 0.55; }
+      0%,100% { opacity: 0.05; }
+      46% { opacity: 0.18; }
+      52% { opacity: 0.08; }
     }
     @keyframes terrainHazeShift {
       0% { transform: translate3d(-6px, 0, 0); }

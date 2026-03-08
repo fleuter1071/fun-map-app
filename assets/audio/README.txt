@@ -1,5 +1,6 @@
-Place the Upside Down theme song at:
+Theme audio assets used by the Customize panel:
 
-assets/audio/upside-down-theme.mp3
+- `assets/audio/upside-down-theme.mp3`
+- `assets/audio/halloween-hip-hop.mp3`
 
-The frontend audio controller references that exact relative path.
+The frontend theme-audio controller references those exact relative paths.

@@ -339,6 +339,10 @@ function startApp(){
   const timeMachineNotice = document.getElementById("timeMachineNotice");
   const spookyThemeToggle = document.getElementById("spookyThemeToggle");
   const upsideDownToggle = document.getElementById("upsideDownToggle");
+  const spookyAudioRow = document.getElementById("spookyAudioRow");
+  const spookyAudioHint = document.getElementById("spookyAudioHint");
+  const spookyAudioToggle = document.getElementById("spookyAudioToggle");
+  const spookyAudioIcon = document.getElementById("spookyAudioIcon");
   const upsideDownAudioRow = document.getElementById("upsideDownAudioRow");
   const upsideDownAudioHint = document.getElementById("upsideDownAudioHint");
   const upsideDownAudioToggle = document.getElementById("upsideDownAudioToggle");
@@ -377,16 +381,47 @@ function startApp(){
   let historicalStartDate = null;
   let isSpookyMode = false;
   let isUpsideDownMode = false;
-  const UPSIDE_DOWN_AUDIO_SRC = "assets/audio/upside-down-theme.mp3";
-  const UPSIDE_DOWN_AUDIO_MUTED_KEY = "uswx:upsideDownAudioMuted:v1";
-  const UPSIDE_DOWN_AUDIO_ENABLED_KEY = "uswx:upsideDownAudioEnabled:v1";
-  const UPSIDE_DOWN_AUDIO_DEFAULT_VOLUME = 0.26;
-  let upsideDownAudio = null;
-  let isUpsideDownAudioMuted = false;
-  let isUpsideDownAudioEnabled = false;
-  let isUpsideDownAudioPlaying = false;
-  let isUpsideDownAudioBlocked = false;
-  let upsideDownAudioVolume = UPSIDE_DOWN_AUDIO_DEFAULT_VOLUME;
+  const THEME_AUDIO_DEFAULT_VOLUME = 0.26;
+  const THEME_AUDIO_CONFIG = {
+    spooky: {
+      src: "assets/audio/halloween-hip-hop.mp3",
+      mutedKey: "uswx:spookyAudioMuted:v1",
+      enabledKey: "uswx:spookyAudioEnabled:v1",
+      rowEl: spookyAudioRow,
+      hintEl: spookyAudioHint,
+      buttonEl: spookyAudioToggle,
+      iconEl: spookyAudioIcon,
+      themeName: "Spooky"
+    },
+    upside: {
+      src: "assets/audio/upside-down-theme.mp3",
+      mutedKey: "uswx:upsideDownAudioMuted:v1",
+      enabledKey: "uswx:upsideDownAudioEnabled:v1",
+      rowEl: upsideDownAudioRow,
+      hintEl: upsideDownAudioHint,
+      buttonEl: upsideDownAudioToggle,
+      iconEl: upsideDownAudioIcon,
+      themeName: "Upside Down"
+    }
+  };
+  const themeAudioState = {
+    spooky: {
+      audio: null,
+      isMuted: false,
+      isEnabled: false,
+      isPlaying: false,
+      isBlocked: false,
+      volume: THEME_AUDIO_DEFAULT_VOLUME
+    },
+    upside: {
+      audio: null,
+      isMuted: false,
+      isEnabled: false,
+      isPlaying: false,
+      isBlocked: false,
+      volume: THEME_AUDIO_DEFAULT_VOLUME
+    }
+  };
   let memoriesData = [];
   let memoriesByCity = new Map();
   let memoryJournalCityKey = null;
@@ -420,156 +455,178 @@ function startApp(){
     try { localStorage.setItem(key, value ? "true" : "false"); } catch {}
   }
 
-  function initUpsideDownAudio(){
-    if(upsideDownAudio) return upsideDownAudio;
-    const audio = new Audio(UPSIDE_DOWN_AUDIO_SRC);
+  function isThemeAudioActive(themeKey){
+    if(themeKey === "upside") return isUpsideDownMode;
+    return isSpookyMode && !isUpsideDownMode;
+  }
+
+  function initThemeAudio(themeKey){
+    const state = themeAudioState[themeKey];
+    const cfg = THEME_AUDIO_CONFIG[themeKey];
+    if(state.audio) return state.audio;
+    const audio = new Audio(cfg.src);
     audio.loop = true;
     audio.preload = "auto";
-    audio.volume = upsideDownAudioVolume;
-    audio.muted = !!isUpsideDownAudioMuted;
+    audio.volume = state.volume;
+    audio.muted = !!state.isMuted;
     audio.addEventListener("play", () => {
-      isUpsideDownAudioPlaying = true;
-      isUpsideDownAudioBlocked = false;
-      renderUpsideDownAudioControls();
+      state.isPlaying = true;
+      state.isBlocked = false;
+      renderThemeAudioControls(themeKey);
     });
     audio.addEventListener("pause", () => {
-      isUpsideDownAudioPlaying = false;
-      renderUpsideDownAudioControls();
+      state.isPlaying = false;
+      renderThemeAudioControls(themeKey);
     });
     audio.addEventListener("ended", () => {
-      isUpsideDownAudioPlaying = false;
-      renderUpsideDownAudioControls();
+      state.isPlaying = false;
+      renderThemeAudioControls(themeKey);
     });
     audio.addEventListener("error", () => {
-      isUpsideDownAudioPlaying = false;
-      isUpsideDownAudioBlocked = false;
-      renderUpsideDownAudioControls();
+      state.isPlaying = false;
+      state.isBlocked = false;
+      renderThemeAudioControls(themeKey);
     });
-    upsideDownAudio = audio;
+    state.audio = audio;
     return audio;
   }
 
-  function pauseUpsideDownAudio({ reset = false } = {}){
-    const audio = initUpsideDownAudio();
+  function pauseThemeAudio(themeKey, { reset = false } = {}){
+    const state = themeAudioState[themeKey];
+    const audio = initThemeAudio(themeKey);
     audio.pause();
-    isUpsideDownAudioPlaying = false;
-    isUpsideDownAudioBlocked = false;
+    state.isPlaying = false;
+    state.isBlocked = false;
     if(reset){
       try { audio.currentTime = 0; } catch {}
     }
-    renderUpsideDownAudioControls();
+    renderThemeAudioControls(themeKey);
   }
 
-  function setUpsideDownAudioMuted(nextMuted, { persist = true } = {}){
-    isUpsideDownAudioMuted = !!nextMuted;
-    const audio = initUpsideDownAudio();
-    audio.muted = isUpsideDownAudioMuted;
-    audio.volume = upsideDownAudioVolume;
-    if(persist) writeBoolLS(UPSIDE_DOWN_AUDIO_MUTED_KEY, isUpsideDownAudioMuted);
-    renderUpsideDownAudioControls();
+  function setThemeAudioMuted(themeKey, nextMuted, { persist = true } = {}){
+    const state = themeAudioState[themeKey];
+    const cfg = THEME_AUDIO_CONFIG[themeKey];
+    state.isMuted = !!nextMuted;
+    const audio = initThemeAudio(themeKey);
+    audio.muted = state.isMuted;
+    audio.volume = state.volume;
+    if(persist) writeBoolLS(cfg.mutedKey, state.isMuted);
+    renderThemeAudioControls(themeKey);
   }
 
-  async function playUpsideDownAudio({ userInitiated = false, forceEnable = false } = {}){
-    if(!isUpsideDownMode) return false;
-    const audio = initUpsideDownAudio();
+  async function playThemeAudio(themeKey, { userInitiated = false, forceEnable = false } = {}){
+    const state = themeAudioState[themeKey];
+    const cfg = THEME_AUDIO_CONFIG[themeKey];
+    if(!isThemeAudioActive(themeKey)) return false;
+    const audio = initThemeAudio(themeKey);
     audio.loop = true;
-    audio.volume = upsideDownAudioVolume;
-    audio.muted = !!isUpsideDownAudioMuted;
+    audio.volume = state.volume;
+    audio.muted = !!state.isMuted;
     if(forceEnable || userInitiated){
-      isUpsideDownAudioEnabled = true;
-      writeBoolLS(UPSIDE_DOWN_AUDIO_ENABLED_KEY, true);
+      state.isEnabled = true;
+      writeBoolLS(cfg.enabledKey, true);
     }
     try{
       await audio.play();
-      isUpsideDownAudioPlaying = !audio.paused;
-      isUpsideDownAudioBlocked = false;
-      if(!isUpsideDownAudioMuted){
-        isUpsideDownAudioEnabled = true;
-        writeBoolLS(UPSIDE_DOWN_AUDIO_ENABLED_KEY, true);
+      state.isPlaying = !audio.paused;
+      state.isBlocked = false;
+      if(!state.isMuted){
+        state.isEnabled = true;
+        writeBoolLS(cfg.enabledKey, true);
       }
-      renderUpsideDownAudioControls();
+      renderThemeAudioControls(themeKey);
       return true;
     } catch(err){
-      isUpsideDownAudioPlaying = false;
-      isUpsideDownAudioBlocked = !userInitiated;
-      renderUpsideDownAudioControls();
+      state.isPlaying = false;
+      state.isBlocked = !userInitiated;
+      renderThemeAudioControls(themeKey);
       return false;
     }
   }
 
-  async function enableUpsideDownAudioFromUserAction(){
-    setUpsideDownAudioMuted(false);
-    isUpsideDownAudioEnabled = true;
-    writeBoolLS(UPSIDE_DOWN_AUDIO_ENABLED_KEY, true);
-    await playUpsideDownAudio({ userInitiated: true, forceEnable: true });
+  async function enableThemeAudioFromUserAction(themeKey){
+    const state = themeAudioState[themeKey];
+    const cfg = THEME_AUDIO_CONFIG[themeKey];
+    setThemeAudioMuted(themeKey, false);
+    state.isEnabled = true;
+    writeBoolLS(cfg.enabledKey, true);
+    await playThemeAudio(themeKey, { userInitiated: true, forceEnable: true });
   }
 
-  function syncUpsideDownAudioWithThemeState(){
-    initUpsideDownAudio();
-    if(!isUpsideDownMode){
-      pauseUpsideDownAudio({ reset: true });
-      renderUpsideDownAudioControls();
+  function syncThemeAudioWithThemeState(themeKey){
+    const state = themeAudioState[themeKey];
+    initThemeAudio(themeKey);
+    if(!isThemeAudioActive(themeKey)){
+      pauseThemeAudio(themeKey, { reset: true });
+      renderThemeAudioControls(themeKey);
       return;
     }
-    if(isUpsideDownAudioMuted){
-      pauseUpsideDownAudio({ reset: true });
-      renderUpsideDownAudioControls();
+    if(state.isMuted){
+      pauseThemeAudio(themeKey, { reset: true });
+      renderThemeAudioControls(themeKey);
       return;
     }
     if(document.hidden){
-      pauseUpsideDownAudio();
-      renderUpsideDownAudioControls();
+      pauseThemeAudio(themeKey);
+      renderThemeAudioControls(themeKey);
       return;
     }
-    playUpsideDownAudio({ userInitiated: false, forceEnable: isUpsideDownAudioEnabled }).catch(() => {});
+    playThemeAudio(themeKey, { userInitiated: false, forceEnable: state.isEnabled }).catch(() => {});
   }
 
-  function renderUpsideDownAudioControls(){
-    if(upsideDownAudioRow){
-      upsideDownAudioRow.hidden = !isUpsideDownMode;
-      if(isUpsideDownMode){
-        const uiState = isUpsideDownAudioPlaying && !isUpsideDownAudioMuted
+  function renderThemeAudioControls(themeKey){
+    const state = themeAudioState[themeKey];
+    const cfg = THEME_AUDIO_CONFIG[themeKey];
+    const rowEl = cfg.rowEl;
+    const hintEl = cfg.hintEl;
+    const buttonEl = cfg.buttonEl;
+    const iconEl = cfg.iconEl;
+    const isActive = isThemeAudioActive(themeKey);
+    if(rowEl){
+      rowEl.hidden = !isActive;
+      if(isActive){
+        const uiState = state.isPlaying && !state.isMuted
           ? "playing"
-          : (isUpsideDownAudioBlocked ? "blocked" : (isUpsideDownAudioMuted ? "muted" : "ready"));
-        upsideDownAudioRow.dataset.audioState = uiState;
+          : (state.isBlocked ? "blocked" : (state.isMuted ? "muted" : "ready"));
+        rowEl.dataset.audioState = uiState;
       } else {
-        delete upsideDownAudioRow.dataset.audioState;
+        delete rowEl.dataset.audioState;
       }
     }
-    if(!isUpsideDownMode){
-      if(upsideDownAudioHint) upsideDownAudioHint.textContent = "Ambient loop ready";
-      if(upsideDownAudioIcon) upsideDownAudioIcon.textContent = "🔇";
-      if(upsideDownAudioToggle){
-        upsideDownAudioToggle.setAttribute("aria-label", "Enable Upside Down theme audio");
-        upsideDownAudioToggle.setAttribute("aria-pressed", "false");
-        upsideDownAudioToggle.disabled = true;
+    if(!isActive){
+      if(hintEl) hintEl.textContent = "Ambient loop ready";
+      if(iconEl) iconEl.textContent = "🔇";
+      if(buttonEl){
+        buttonEl.setAttribute("aria-label", `Enable ${cfg.themeName} theme audio`);
+        buttonEl.setAttribute("aria-pressed", "false");
+        buttonEl.disabled = true;
       }
       return;
     }
-    const isAudible = isUpsideDownAudioPlaying && !isUpsideDownAudioMuted;
+    const isAudible = state.isPlaying && !state.isMuted;
     let hint = "Theme audio available";
     let icon = "🔈";
-    let label = "Enable Upside Down theme audio";
+    let label = `Enable ${cfg.themeName} theme audio`;
     if(isAudible){
       hint = "Theme audio on";
       icon = "🔊";
-      label = "Mute Upside Down theme audio";
-    } else if(isUpsideDownAudioBlocked){
+      label = `Mute ${cfg.themeName} theme audio`;
+    } else if(state.isBlocked){
       hint = "Click to enable theme audio";
       icon = "▶";
-      label = "Start Upside Down theme audio";
-    } else if(isUpsideDownAudioMuted){
+      label = `Start ${cfg.themeName} theme audio`;
+    } else if(state.isMuted){
       hint = "Audio muted";
       icon = "🔇";
-      label = "Unmute Upside Down theme audio";
+      label = `Unmute ${cfg.themeName} theme audio`;
     }
-    if(upsideDownAudioHint) upsideDownAudioHint.textContent = hint;
-    if(upsideDownAudioIcon) upsideDownAudioIcon.textContent = icon;
-    if(upsideDownAudioToggle){
-      upsideDownAudioToggle.disabled = false;
-      upsideDownAudioToggle.setAttribute("aria-label", label);
-      upsideDownAudioToggle.setAttribute("aria-pressed", isAudible ? "true" : "false");
-      upsideDownAudioToggle.title = hint;
+    if(hintEl) hintEl.textContent = hint;
+    if(iconEl) iconEl.textContent = icon;
+    if(buttonEl){
+      buttonEl.disabled = false;
+      buttonEl.setAttribute("aria-label", label);
+      buttonEl.setAttribute("aria-pressed", isAudible ? "true" : "false");
+      buttonEl.title = hint;
     }
   }
 
@@ -1285,6 +1342,9 @@ function startApp(){
 
   async function setSpookyMode(nextMode){
     isSpookyMode = !!nextMode;
+    if(isSpookyMode) isUpsideDownMode = false;
+    if(spookyThemeToggle) spookyThemeToggle.checked = isSpookyMode;
+    if(upsideDownToggle) upsideDownToggle.checked = isUpsideDownMode;
     if(isSpookyMode){
       activeCities = HORROR_CITIES;
     } else {
@@ -1292,6 +1352,8 @@ function startApp(){
     }
     applyColdestToActiveCities();
     applyThemeAttribute();
+    syncThemeAudioWithThemeState("spooky");
+    syncThemeAudioWithThemeState("upside");
     clearPinsAndFocus();
     clearAQIData();
     selectedHourIndex = 0;
@@ -1306,10 +1368,17 @@ function startApp(){
 
   async function setUpsideDownMode(nextMode){
     isUpsideDownMode = !!nextMode;
+    if(isUpsideDownMode) isSpookyMode = false;
     if(upsideDownToggle) upsideDownToggle.checked = isUpsideDownMode;
+    if(spookyThemeToggle) spookyThemeToggle.checked = isSpookyMode;
+    activeCities = isSpookyMode ? HORROR_CITIES : TOP_CITIES;
+    applyColdestToActiveCities();
     runThemeTransition(isUpsideDownMode);
     applyThemeAttribute();
-    syncUpsideDownAudioWithThemeState();
+    syncThemeAudioWithThemeState("upside");
+    syncThemeAudioWithThemeState("spooky");
+    clearPinsAndFocus();
+    if(cachedUSMap) render(cachedUSMap);
 
     // Upside Down is a visual/UX mode; do not force historical weather.
     if(timeMachineToggle){
@@ -1418,14 +1487,27 @@ function startApp(){
     });
   }
 
-  if(upsideDownAudioToggle){
-    upsideDownAudioToggle.addEventListener("click", async () => {
-      if(!isUpsideDownMode) return;
-      if(isUpsideDownAudioPlaying && !isUpsideDownAudioMuted){
-        setUpsideDownAudioMuted(true);
+  if(spookyAudioToggle){
+    spookyAudioToggle.addEventListener("click", async () => {
+      const state = themeAudioState.spooky;
+      if(!isSpookyMode) return;
+      if(state.isPlaying && !state.isMuted){
+        setThemeAudioMuted("spooky", true);
         return;
       }
-      await enableUpsideDownAudioFromUserAction();
+      await enableThemeAudioFromUserAction("spooky");
+    });
+  }
+
+  if(upsideDownAudioToggle){
+    upsideDownAudioToggle.addEventListener("click", async () => {
+      const state = themeAudioState.upside;
+      if(!isUpsideDownMode) return;
+      if(state.isPlaying && !state.isMuted){
+        setThemeAudioMuted("upside", true);
+        return;
+      }
+      await enableThemeAudioFromUserAction("upside");
     });
   }
 
@@ -3704,13 +3786,19 @@ function startApp(){
   });
   document.addEventListener("visibilitychange", () => {
     if(document.hidden){
-      if(isUpsideDownMode) pauseUpsideDownAudio();
+      if(isUpsideDownMode) pauseThemeAudio("upside");
+      if(isSpookyMode) pauseThemeAudio("spooky");
       return;
     }
-    if(isUpsideDownMode && isUpsideDownAudioEnabled && !isUpsideDownAudioMuted){
-      playUpsideDownAudio({ userInitiated: false, forceEnable: true }).catch(() => {});
+    if(isUpsideDownMode && themeAudioState.upside.isEnabled && !themeAudioState.upside.isMuted){
+      playThemeAudio("upside", { userInitiated: false, forceEnable: true }).catch(() => {});
     } else {
-      renderUpsideDownAudioControls();
+      renderThemeAudioControls("upside");
+    }
+    if(isSpookyMode && themeAudioState.spooky.isEnabled && !themeAudioState.spooky.isMuted){
+      playThemeAudio("spooky", { userInitiated: false, forceEnable: true }).catch(() => {});
+    } else {
+      renderThemeAudioControls("spooky");
     }
   });
   populateMemoryCityOptions();
@@ -3721,10 +3809,14 @@ function startApp(){
   setMemoryFormVisible(false);
   setMemoryJournalVisible(false);
   setAddCityModalVisible(false);
-  isUpsideDownAudioMuted = readBoolLS(UPSIDE_DOWN_AUDIO_MUTED_KEY, false);
-  isUpsideDownAudioEnabled = readBoolLS(UPSIDE_DOWN_AUDIO_ENABLED_KEY, false);
-  initUpsideDownAudio();
-  renderUpsideDownAudioControls();
+  for(const themeKey of Object.keys(THEME_AUDIO_CONFIG)){
+    const cfg = THEME_AUDIO_CONFIG[themeKey];
+    const state = themeAudioState[themeKey];
+    state.isMuted = readBoolLS(cfg.mutedKey, false);
+    state.isEnabled = readBoolLS(cfg.enabledKey, false);
+    initThemeAudio(themeKey);
+    renderThemeAudioControls(themeKey);
+  }
 
   const _urlState = readPermalinkFromURL();
   if(_urlState){

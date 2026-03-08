@@ -99,6 +99,22 @@
               <input type="checkbox" id="spookyThemeToggle" />
               <span>Spooky Theme</span>
             </label>
+            <div class="themeAudioRow" id="spookyAudioRow" hidden aria-live="polite">
+              <div class="themeAudioMeta">
+                <span class="themeAudioLabel">Theme Audio</span>
+                <span class="themeAudioHint" id="spookyAudioHint">Ambient loop ready</span>
+              </div>
+              <button
+                id="spookyAudioToggle"
+                type="button"
+                class="themeAudioButton"
+                title="Toggle Spooky theme audio"
+                aria-label="Enable Spooky theme audio"
+                aria-pressed="false"
+              >
+                <span class="themeAudioIcon" id="spookyAudioIcon" aria-hidden="true">🔇</span>
+              </button>
+            </div>
             <button id="addCityMenuBtn" type="button" class="menuButton">+ Add City</button>
           </div>
         </div>
