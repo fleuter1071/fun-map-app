@@ -510,3 +510,59 @@ Implemented a second theme-audio experience for Spooky mode using the provided h
 2. Add Playwright (or equivalent) smoke coverage for Customize-panel theme toggles and theme-audio controls.
 3. If more theme-specific effects are added later, separate theme behavior into a dedicated module so main.js does not become the long-term integration bottleneck.
 
+
+## Date/time
+2026-03-08 20:03:55 -04:00
+
+## Feature name, description, and value provided
+Legend HUD V2 + Spooky City Expansion
+Description: Refined the lower-left map HUD from a large multi-purpose status box into a compact floating legend with a separate transient status chip, increased the desktop map stage so the map better fills the viewport, and expanded the Spooky theme dataset with five additional non-duplicate horror movie city pairings.
+Value provided: Improves map readability and overall product polish by making the legend calmer and more map-focused, preserves important operational feedback without permanent clutter, reduces dead space beneath the map, and enriches the Spooky theme with broader geographic and movie variety.
+
+## Summary
+Implemented a V2 redesign of the lower-left legend so the resting state now shows only the current map time context, active metric, and the min/max gradient scale. Operational messages such as loading, updated, partial results, and historical unavailability were separated into a transient chip that appears above the legend and automatically fades away when appropriate. The map stage was also made taller on desktop and its outer bottom spacing was tightened so the map reads more like the main hero surface instead of leaving unused page space below it. In parallel, the Spooky theme horror-city config was expanded with Bangor/It, Washington/The Exorcist, Chicago/Candyman, Austin/The Texas Chain Saw Massacre, and Seattle/The Ring, while avoiding duplicate additions against the existing list.
+
+## Files changed
+- C:\Users\dougs\Weather_Map_Cities_2_Codex\index.html
+- C:\Users\dougs\Weather_Map_Cities_2_Codex\styles\main.css
+- C:\Users\dougs\Weather_Map_Cities_2_Codex\src\main.js
+- C:\Users\dougs\Weather_Map_Cities_2_Codex\src\config\horror-cities.js
+
+## Technical Architecture changes or key technical decisions made
+- Separated persistent legend rendering from transient status messaging in the frontend controller rather than continuing to overload one shared HUD surface.
+- Added a small status-chip state model in src/main.js with explicit auto-dismiss timing, message type handling, and loading-progress visibility.
+- Kept the compact legend always anchored lower-left inside the map container and updated marker UI avoid-zone logic to account for the new in-map footprint.
+- Simplified legend copy so the persistent state now only reflects map interpretation context, while system feedback uses concise transient copy.
+- Tuned desktop map-stage sizing entirely at the CSS layer to preserve the existing responsive/mobile path while reducing empty space on larger screens.
+- Expanded the Spooky dataset using real mappable US cities for recognizable horror films, choosing Bangor as the real-world stand-in for It’s fictional Derry, Maine.
+
+## Assumptions
+- The legend should behave as a passive interpretive aid and therefore belongs in the quieter lower-left area rather than competing with the right-side control rail.
+- Short transient status messages are sufficient for most loading and refresh feedback now that the persistent HUD no longer acts as a verbose console.
+- Desktop whitespace below the map was better solved by enlarging the map stage rather than adding filler footer content.
+- Bangor is an acceptable real-location substitute for Stephen King’s fictional Derry in the Spooky theme dataset.
+- Existing Blair Witch duplication in the config is intentional or at least acceptable for now because it predates this release.
+
+## Known limitations
+- Interactive browser QA was still manual/observational in nature; no automated visual or end-to-end coverage currently validates legend chip timing, fade behavior, or final viewport balance.
+- The shortened status messaging is intentionally less verbose, so some previously visible operational detail is now omitted from the persistent surface.
+- The Spooky dataset is curated rather than exhaustive and may still need future tuning for geographic density and franchise balance.
+- The horror-city config still contains a pre-existing duplicate movie title for The Blair Witch Project across two Maryland locations.
+
+## Key learnings that you can bring with you to future sessions
+- On map-heavy products, giving the map more vertical ownership is often more effective than trying to fill empty space with new UI.
+- A legend reads better when it behaves like a stable instrument and not a running system log.
+- Transient status chips preserve operational feedback without permanently degrading the calmness of the map canvas.
+- Lower-left placement works especially well when the right edge already hosts primary map controls and theme drawers.
+- When using fictional horror settings, choosing a clear real-world stand-in keeps the data model practical while preserving thematic intent.
+
+## Remaining TODOs
+- Run a production browser pass to validate legend/status fade timing and final lower-left balance at common desktop widths.
+- Consider whether the pre-existing duplicate Blair Witch entries should be preserved intentionally or consolidated in a future Spooky-theme cleanup.
+- Add lightweight browser automation for legend loading/success/warning chip behavior if HUD polish continues to evolve.
+- Revisit the Spooky dataset later for additional regional balance if more horror cities are added.
+
+## Next steps
+1. Run a production visual smoke test covering live legend state, loading chip behavior, refresh success messaging, and desktop map-stage balance.
+2. Decide whether to keep or clean up the existing duplicate Blair Witch movie representation in the Spooky config.
+3. If the legend continues to evolve, add screenshot-based regression coverage so future HUD polish changes are safer to ship.
