@@ -566,3 +566,56 @@ Implemented a V2 redesign of the lower-left legend so the resting state now show
 1. Run a production visual smoke test covering live legend state, loading chip behavior, refresh success messaging, and desktop map-stage balance.
 2. Decide whether to keep or clean up the existing duplicate Blair Witch movie representation in the Spooky config.
 3. If the legend continues to evolve, add screenshot-based regression coverage so future HUD polish changes are safer to ship.
+
+## Date/time
+2026-03-23 22:41:11 -04:00
+
+## Feature name, description, and value provided
+Apple HIG Shell + Hover + Inspector Redesign with Memory Feature Rollback
+Description: Reworked the primary desktop UX around Apple-human-centered design principles by simplifying the top shell, converting hover into a quick-look card, replacing the stacked pinned-city dashboard with a single-city inspector, and soft-disabling the visible memory feature to remove interaction conflicts and reduce clutter.
+Value provided: Makes the map easier to scan, keeps time and detail controls calmer, improves pinned-city comparison without overwhelming the canvas, and removes a feature that was actively interfering with core city-click/pin behavior.
+
+## Files changed
+- C:\Users\dougs\Weather_Map_Cities_2_Codex\index.html
+- C:\Users\dougs\Weather_Map_Cities_2_Codex\styles\main.css
+- C:\Users\dougs\Weather_Map_Cities_2_Codex\src\main.js
+
+## Technical Architecture changes or key technical decisions made
+- Simplified the header information architecture in `index.html` and `styles/main.css` so the timeline is the dominant control object and header actions are quieter utility controls.
+- Refactored `showTooltip()` in `src/main.js` into a quick-look hover surface that emphasizes current conditions, a small metric set, and short metadata rows rather than forecast/profile/memory/sports.
+- Replaced the old stacked pinned-card renderer with a single active-city inspector model in `renderPinnedPanel()`, including pinned-city chip rail state, segmented tab state, and active pinned-city selection logic.
+- Introduced helper state for the inspector (`pinnedPanelTab`, `getActivePinnedKey`, `setActivePinnedKey`, and `availablePinnedTabsForCity`) instead of overloading the previous pinned-card stack model.
+- Soft-disabled the visible memory feature by removing the header entry point, forcing memory stars hidden, removing pointer interaction from memory-star nodes, and excluding memory from the visible pinned inspector while leaving the underlying memory API/model code intact.
+- Ran a QA/release-readiness pass and pushed the shipped changes to `main` in commit `bc96ff8`.
+
+## Assumptions
+- Desktop is the primary supported product surface for this release; mobile remains secondary and not fully production-polished.
+- A soft rollback of visible memory functionality is acceptable without deleting the underlying memory data model or endpoints.
+- Pinned-city detail is better served by a single active inspector with tabs than by a vertically stacked dashboard of full cards.
+- Hover should answer “what’s happening here now?” and leave deeper context to the inspector.
+
+## Known limitations
+- Memory functionality still exists in the codebase and markup behind the scenes; this release only hides it from normal user-facing interaction.
+- The pinned-panel hint text (`Click dots to pin`) is still visible even after pins exist, which is slightly redundant.
+- Hover loading/error copy is functional but still a little more instructional than the final steady-state hover.
+- No automated browser regression coverage exists yet for the redesigned shell, hover, inspector, or memory rollback paths.
+- Mobile responsiveness remains materially weaker than the desktop experience.
+
+## Key learnings that you can bring with you to future sessions
+- The highest-leverage UI improvements came from structural simplification, not decorative restyling.
+- Hover surfaces should be treated as quick-look instruments; deeper content belongs in a deliberate inspector.
+- Replacing additive card stacks with a single active inspector dramatically improves map-heavy UX clarity.
+- When a secondary feature starts conflicting with core map interactions, a clean soft rollback can be the right product decision.
+- Screenshot-driven review loops were especially effective for tightening hierarchy and interaction polish in this repo.
+
+## Remaining TODOs
+- Decide whether to fully remove the hidden memory UI/API path or redesign it later as a separate, calmer feature.
+- Revisit the pinned-panel hint and hover fallback copy for one final polish pass if desired.
+- Do a dedicated pass on `View Options` information architecture.
+- Address the mobile layout explicitly rather than relying on the desktop shell to collapse acceptably.
+- Add automated browser smoke coverage for hover, pinning, inspector tab switching, and memory rollback regressions.
+
+## Next steps
+1. Run a post-deploy production smoke test covering hover, pinning, inspector tab switching, and theme states on desktop.
+2. Decide whether memory should be fully removed or later reintroduced in a different UX model.
+3. Plan the next design pass around `View Options` and/or mobile support, depending on product priority.
