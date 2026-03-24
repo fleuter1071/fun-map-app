@@ -864,8 +864,8 @@
       padding: 10px 11px;
       font-size: 12px;
       line-height: 1.25;
-      min-width: 260px;
-      max-width: min(520px, calc(100vw - 36px));
+      min-width: 250px;
+      max-width: min(380px, calc(100vw - 36px));
       display: none;
       box-shadow: var(--dataSurfaceShadow);
       backdrop-filter: blur(8px);
@@ -896,6 +896,37 @@
     .tooltip-empty{ color: var(--dataSurfaceMuted); font-size: 12px; }
     .tooltip-current-note{ margin-top: 6px; font-size: 11px; color: var(--dataSurfaceMuted); }
     .tooltip-memory{ color: var(--dataSurfaceMuted); font-size: 11px; border-left: 2px solid var(--dataSurfaceChipBorder); padding-left: 8px; }
+    .tooltip-context{
+      display: grid;
+      gap: 7px;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--dataSurfaceChipBorder);
+    }
+    .tooltip-context-row{
+      display: grid;
+      gap: 2px;
+    }
+    .tooltip-context-row-inline{
+      grid-template-columns: auto 1fr;
+      align-items: baseline;
+      gap: 8px;
+    }
+    .tooltip-context-label{
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      font-weight: 800;
+      color: rgba(255,255,255,0.58);
+    }
+    .tooltip-context-value{
+      font-size: 11px;
+      line-height: 1.35;
+      color: var(--dataSurfaceText);
+    }
+    .tooltip-context-row-inline .tooltip-context-value{
+      color: var(--dataSurfaceMuted);
+    }
     .tooltip-horror-hero{
       margin-top: 7px;
       display: grid;
@@ -1819,8 +1850,8 @@
       position:absolute;
       top: 14px;
       right: 14px;
-      width: 340px;
-      max-width: min(380px, calc(100vw - 24px));
+      width: 350px;
+      max-width: min(360px, calc(100vw - 24px));
       max-height: calc(76vh - 80px);
       overflow-y:auto;
       overflow-x:hidden;
@@ -1847,147 +1878,322 @@
       margin-bottom: 8px;
     }
     #pinnedPanel .panelTitle{ font-weight: 800; font-size: 12px; color: var(--text); }
-    #pinnedPanel .panelHint{ font-size: 11px; color: var(--muted); }
-
-    .pinRow{
-      position: relative;
-      padding: 8px 8px;
-      border: 1px solid var(--dataSurfaceTileBorder);
-      border-radius: 12px;
-      background: var(--dataSurfaceTileBg);
-      margin-bottom: 8px;
+    #pinnedPanel .panelHint{ font-size: 11px; color: rgba(232,241,255,0.5); }
+    .pinInspectorShell{
+      display: grid;
+      gap: 14px;
     }
-    .pinRow:last-child{ margin-bottom: 0; }
-    .pinMain{ min-width: 0; width: 100%; padding-right: 30px; }
-    .pin-head{ display: block; }
-    .pinPop{ margin-top: 2px; }
-    .pinCity{ font-size: 12px; color: var(--dataSurfaceText); }
-    .pinMeta{ font-size: 11px; color: var(--muted); margin-top: 2px; }
-    .pin-chip-row{
-      margin-top: 6px;
+    .pinRail{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .pinRailItem{
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      max-width: 100%;
+      border: 1px solid var(--dataSurfaceTileBorder);
+      background: rgba(255,255,255,0.03);
+      border-radius: 999px;
+      padding: 3px;
+    }
+    .pinRailItem.is-active{
+      border-color: rgba(125,211,252,0.42);
+      background: rgba(125,211,252,0.10);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+    }
+    .pinRailSelect,
+    .pinRailRemove,
+    .pinInspectorRemove,
+    .pinSegmentBtn{
+      font: inherit;
+      color: inherit;
+      cursor: pointer;
+    }
+    .pinRailSelect{
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      max-width: 100%;
+      border: 0;
+      background: transparent;
+      color: var(--dataSurfaceText);
+      padding: 5px 8px;
+      border-radius: 999px;
+    }
+    .pinRailCity{
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .pinRailTemp{
+      flex: 0 0 auto;
+      font-size: 10px;
+      font-weight: 800;
+      color: var(--dataSurfaceMuted);
+    }
+    .pinRailRemove{
+      width: 26px;
+      height: 26px;
+      border: 0;
+      background: transparent;
+      border-radius: 999px;
+      color: var(--dataSurfaceMuted);
+    }
+    .pinRailRemove:hover,
+    .pinInspectorRemove:hover{
+      background: rgba(255,255,255,0.08);
+      color: var(--dataSurfaceText);
+    }
+    .pinInspectorBody{
+      border: 1px solid var(--dataSurfaceTileBorder);
+      background: rgba(255,255,255,0.035);
+      border-radius: 14px;
+      padding: 14px;
+      display: grid;
+      gap: 12px;
+    }
+    .pinInspectorHeader{
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .pinInspectorCity{
+      font-size: 16px;
+      font-weight: 800;
+      color: var(--dataSurfaceText);
+    }
+    .pinInspectorRemove{
+      width: 28px;
+      height: 28px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.025);
+      color: var(--dataSurfaceMuted);
+      border-radius: 999px;
+      padding: 0;
+      font-size: 16px;
+      line-height: 1;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .pinSegmented{
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      width: fit-content;
+      max-width: 100%;
+      padding: 4px;
+      border: 1px solid var(--dataSurfaceTileBorder);
+      background: rgba(255,255,255,0.025);
+      border-radius: 999px;
+      overflow-x: auto;
+    }
+    .pinSegmentBtn{
+      border: 0;
+      background: transparent;
+      color: var(--dataSurfaceMuted);
+      border-radius: 999px;
+      padding: 7px 12px;
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .pinSegmentBtn.is-active{
+      background: rgba(125,211,252,0.14);
+      color: var(--dataSurfaceText);
+      box-shadow: inset 0 0 0 1px rgba(125,211,252,0.35);
+    }
+    .pinTabBody{
+      min-width: 0;
+    }
+    .pinInspectorOverview{
+      display: grid;
+      gap: 12px;
+    }
+    .pinInspectorTagRow{
       display: flex;
       flex-wrap: wrap;
       gap: 6px;
     }
-    .pin-chip{
+    .pinInspectorTag{
       display: inline-flex;
       align-items: center;
-      font-size: 10px;
-      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 999px;
       border: 1px solid var(--dataSurfaceChipBorder);
       background: var(--dataSurfaceChipBg);
-      border-radius: 999px;
-      padding: 2px 7px;
       color: var(--dataSurfaceMuted);
+      font-size: 10px;
+      font-weight: 700;
     }
-    .pin-chip-live{
-      color: #34d399;
-      border-color: rgba(52,211,153,0.45);
-      background: rgba(16,185,129,0.08);
+    .pinInspectorTag-live{
+      color: #86efac;
+      border-color: rgba(52,211,153,0.42);
+      background: rgba(16,185,129,0.09);
     }
-    .pin-chip-cache{
-      color: #93c5fd;
+    .pinInspectorTag-cache{
+      color: #bfdbfe;
       border-color: rgba(147,197,253,0.4);
-      background: rgba(59,130,246,0.08);
+      background: rgba(59,130,246,0.10);
     }
-    .pin-chip-upside{
+    .pinInspectorTag-upside{
       color: #fecaca;
       border-color: rgba(239,68,68,0.5);
       background: rgba(239,68,68,0.14);
     }
-    .pin-chip-rift{
+    .pinInspectorTag-rift{
       color: #cffafe;
-      border-color: rgba(34,211,238,0.58);
+      border-color: rgba(34,211,238,0.55);
       background: rgba(34,211,238,0.14);
     }
-    .pinHero{
-      margin-top: 10px;
-      border: 1px solid var(--dataSurfaceTileBorder);
-      background: var(--dataSurfaceTileBg);
-      border-radius: 10px;
-      padding: 8px 10px;
+    .pinInspectorHero{
+      display: grid;
+      gap: 4px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--dataSurfaceTileBorder);
     }
-    .pinHeroMain{
-      font-size: 27px;
+    .pinInspectorHeroMain{
+      font-size: 33px;
       line-height: 1;
+      letter-spacing: -0.5px;
       font-weight: 900;
-      color: var(--text);
-      letter-spacing: -0.4px;
+      color: var(--dataSurfaceText);
     }
-    .pinHeroSub{
-      margin-top: 4px;
-      font-size: 12px;
-      color: var(--text);
+    .pinInspectorHeroSub{
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--dataSurfaceText);
+    }
+    .pinInspectorMuted{
+      color: var(--dataSurfaceMuted);
       font-weight: 600;
     }
-    .pin-memory{
-      margin-top: 8px;
+    .pinInspectorMeta{
       font-size: 11px;
-      color: var(--muted);
-      border-left: 2px solid var(--dataSurfaceChipBorder);
-      padding-left: 8px;
+      color: var(--dataSurfaceMuted);
     }
-    .pin-bento-grid{
+    .pinInspectorMetrics{
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
-      margin: 16px 0;
-    }
-    .pin-bento-grid > .pin-tile{ min-width: 0; }
-    .pin-tile{
-      display: flex;
-      flex-direction: column;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 8px;
-      background: var(--dataSurfaceTileBg);
-      border: 1px solid var(--dataSurfaceTileBorder);
-      border-radius: 12px;
-      padding: 12px;
     }
-    .pin-tile-title{
-      font-size: 10px;
-      color: var(--muted);
-      text-transform: uppercase;
-      margin-bottom: 4px;
-      letter-spacing: 0.5px;
-      font-weight: 800;
-    }
-    .pin-data-row{
+    .pinMetricCard{
       display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      align-items: center;
-      gap: 8px;
-      font-size: 13px;
-      color: var(--text);
-    }
-    .pin-data-label{
-      color: var(--muted);
-      font-size: 12px;
+      gap: 4px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.025);
+      border-radius: 10px;
+      padding: 8px;
       min-width: 0;
     }
-    .pin-data-value{
-      text-align: right;
+    .pinMetricLabel{
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      font-weight: 800;
+      color: var(--dataSurfaceMuted);
+    }
+    .pinMetricValue{
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--dataSurfaceText);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .pinInspectorNote{
+      display: grid;
+      gap: 2px;
+      padding-top: 4px;
+      border-top: 1px solid var(--dataSurfaceTileBorder);
+    }
+    .pinInspectorNoteLabel,
+    .pinTabSectionTitle,
+    .pinSportsLeague{
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.45px;
+      font-weight: 800;
+      color: var(--dataSurfaceMuted);
+    }
+    .pinInspectorNoteValue{
+      font-size: 12px;
+      line-height: 1.35;
+      color: var(--dataSurfaceText);
+    }
+    .pinInfoList{
+      display: grid;
+      gap: 10px;
+    }
+    .pinInfoRow{
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: baseline;
+    }
+    .pinInfoLabel{
+      font-size: 12px;
+      color: var(--dataSurfaceMuted);
+    }
+    .pinInfoValue{
+      font-size: 13px;
       font-weight: 700;
-      flex: 0 0 auto;
+      color: var(--dataSurfaceText);
+      text-align: right;
       white-space: nowrap;
     }
-    .pin-value-note{
-      color: var(--muted);
-      font-weight: 600;
+    .pinTabFoot{
+      margin-top: 10px;
+      font-size: 11px;
+      color: var(--dataSurfaceMuted);
+    }
+    .pinTabSection{
+      display: grid;
+      gap: 7px;
+      padding-top: 2px;
+    }
+    .pinSportsList{
+      display: grid;
+      gap: 10px;
+    }
+    .pinSportsGroup{
+      display: grid;
+      gap: 5px;
+    }
+    .pinSportsRow{
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 12px;
+      color: var(--dataSurfaceText);
+    }
+    .pinSportsMatch{
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 1 1 auto;
+    }
+    .pinSportsTime{
+      white-space: nowrap;
+      color: var(--dataSurfaceMuted);
+      flex: 0 0 auto;
       font-size: 11px;
     }
-    .pin-tile-foot{
-      margin-top: 2px;
-      color: var(--muted);
-      font-size: 11px;
-    }
-    .pinForecastBlock{ margin-top: 2px; }
-    .pinForecastTitle{
-      font-size: 10px;
-      font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: var(--muted);
-      margin-bottom: 6px;
+    .pinInspectorEmpty{
+      font-size: 12px;
+      color: var(--dataSurfaceMuted);
+      padding: 10px 0 2px;
     }
     .pin-forecast-grid{
       display: grid;
@@ -2132,11 +2338,13 @@ g.city.pin-disabled circle.city-dot{
       --header-bg: rgba(10, 18, 34, 0.84);
       --ghost-bg: rgba(255,255,255,0.045);
       --ghost-border: rgba(255,255,255,0.18);
-      --cta-bg: #ff6a2b;
-      --cta-bg-hover: #ff7c45;
       --hud-bg: rgba(12, 24, 44, 0.9);
       --header-height: 96px;
       --map-wrap-vpad: 8px;
+      --header-utility-bg: rgba(255,255,255,0.055);
+      --header-utility-bg-hover: rgba(255,255,255,0.12);
+      --header-utility-border: rgba(255,255,255,0.18);
+      --header-utility-border-strong: rgba(255,255,255,0.28);
     }
 
     body{
@@ -2144,22 +2352,27 @@ g.city.pin-disabled circle.city-dot{
     }
 
     header{
-      padding: 14px 18px;
-      grid-template-columns: 1fr minmax(420px, 620px) 1fr;
-      gap: 12px;
+      padding: 12px 18px;
+      grid-template-columns: minmax(180px, 240px) minmax(420px, 620px) auto;
+      gap: 16px;
       background: linear-gradient(to bottom, var(--header-bg), rgba(10,18,34,0.76));
       border-bottom-color: rgba(255,255,255,0.14);
       box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
     }
+    .headerLeft{
+      max-width: 240px;
+    }
     header h1{
       font-family: var(--heading-font);
       font-size: 17px;
-      letter-spacing: 0.1px;
+      letter-spacing: 0.05px;
       font-weight: 700;
+      line-height: 1.1;
     }
     header .sub{
-      font-size: 12px;
-      color: rgba(232,234,240,0.84);
+      font-size: 11px;
+      line-height: 1.25;
+      color: rgba(232,234,240,0.64);
     }
     .headerCenter{
       align-items: stretch;
@@ -2282,24 +2495,28 @@ g.city.pin-disabled circle.city-dot{
     .headerRight.actions{
       justify-content: flex-end;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
       flex-wrap: nowrap;
-      width: max-content;
-      max-width: 390px;
+      width: auto;
+      max-width: 420px;
       justify-self: end;
     }
     .actionGroupMain{
       display: inline-flex;
       align-items: center;
-      gap: 6px;
+      gap: 4px;
+      padding: 3px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.06);
+      background: rgba(255,255,255,0.03);
     }
     .btnAction{
-      height: 40px;
-      min-width: 96px;
-      padding: 0 14px;
-      border-radius: 12px;
-      font-size: 13px;
-      font-weight: 800;
+      height: 36px;
+      min-width: 84px;
+      padding: 0 12px;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 700;
       letter-spacing: 0.1px;
       white-space: nowrap;
       line-height: 1;
@@ -2307,37 +2524,28 @@ g.city.pin-disabled circle.city-dot{
     }
     #addCityBtn,
     #logMemoryBtn{
-      min-width: 104px;
+      min-width: 96px;
     }
     .btnAction.btnSecondary{
-      background: rgba(255,255,255,0.07);
-      border: 1px solid rgba(255,255,255,0.24);
-      color: #f3f7ff;
-    }
-    .btnAction.btnPrimary{
-      background: var(--cta-bg);
-      border: 1px solid rgba(255,255,255,0.12);
-      color: #ffffff;
-      box-shadow: 0 8px 18px rgba(255,106,43,0.28);
-    }
-    .btnAction.btnPrimary:hover{
-      background: var(--cta-bg-hover);
-      border-color: rgba(255,255,255,0.2);
-      box-shadow: 0 10px 22px rgba(255,106,43,0.35);
+      background: rgba(255,255,255,0.042);
+      border: 1px solid rgba(255,255,255,0.14);
+      color: rgba(243,247,255,0.88);
     }
     .btnAction.btnSecondary:hover{
-      border-color: rgba(125,211,252,0.62);
-      background: rgba(255,255,255,0.13);
+      border-color: var(--header-utility-border-strong);
+      background: rgba(255,255,255,0.10);
     }
     .actionMenu > summary{
-      min-height: 40px;
+      min-height: 36px;
       display: inline-flex;
       align-items: center;
-      border-radius: 12px;
-      background: rgba(255,255,255,0.055);
-      border-color: rgba(255,255,255,0.18);
+      border-radius: 10px;
+      background: rgba(255,255,255,0.042);
+      border-color: rgba(255,255,255,0.14);
       padding: 0 12px;
-      color: rgba(243,247,255,0.86);
+      color: rgba(243,247,255,0.82);
+      font-size: 12px;
+      font-weight: 700;
     }
 
     #mapWrap{
@@ -2525,6 +2733,9 @@ g.city.pin-disabled circle.city-dot{
       .actionGroupMain{
         flex-wrap: wrap;
         justify-content: flex-end;
+        background: transparent;
+        border-color: transparent;
+        padding: 0;
       }
     }
 
@@ -2550,9 +2761,12 @@ g.city.pin-disabled circle.city-dot{
         grid-template-columns: 1fr 1fr;
         gap: 8px;
         width: 100%;
+        background: transparent;
+        border-color: transparent;
+        padding: 0;
       }
       .actionGroupMain #addCityBtn{
-        grid-column: 1 / -1;
+        grid-column: auto;
       }
       .btnAction{
         width: 100%;

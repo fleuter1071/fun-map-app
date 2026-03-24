@@ -1207,7 +1207,7 @@ function startApp(){
   function updateMemoryStars(){
     if(!gCities) return;
     gCities.selectAll("g.city text.memory-star")
-      .style("display", d => memoriesByCity.has(cityKey(d)) ? null : "none");
+      .style("display", "none");
   }
 
   async function jumpToMemoryDate(memory){
@@ -1557,6 +1557,7 @@ function startApp(){
   let pendingZoomState = null;
   let focusedKey = null;
   let pendingFocusKey = null;
+  let pinnedPanelTab = "overview";
 
   function _clamp(n, lo, hi){ n = +n; return isFinite(n) ? Math.max(lo, Math.min(hi, n)) : lo; }
   function _clampInt(n, lo, hi, def){ n = parseInt(n, 10); return isFinite(n) ? Math.max(lo, Math.min(hi, n)) : def; }
@@ -1634,12 +1635,38 @@ function startApp(){
     refreshMarkerSystem(lastZoomTransform?.k || 1);
   }
 
+  function getPinnedKeysInView(){
+    return Array.from(pinned.keys()).filter((k) => pinned.get(k));
+  }
+
+  function getActivePinnedKey(){
+    const keys = getPinnedKeysInView();
+    if(keys.length === 0) return null;
+    if(focusedKey && pinned.has(focusedKey)) return focusedKey;
+    return keys[keys.length - 1];
+  }
+
+  function setActivePinnedKey(nextKey, { syncFocus = true } = {}){
+    const resolved = (nextKey && pinned.has(nextKey)) ? nextKey : getActivePinnedKey();
+    focusedKey = resolved || null;
+    if(syncFocus) applyFocusStyles();
+    return focusedKey;
+  }
+
+  function availablePinnedTabsForCity(city){
+    const tabs = [{ id: "overview", label: "Overview" }, { id: "forecast", label: "Forecast" }, { id: "profile", label: "Profile" }];
+    const hasExtras = isSportsFilterActive && gamesForCityKey(cityKey(city)).length > 0;
+    if(hasExtras) tabs.push({ id: "extras", label: "Extras" });
+    return tabs;
+  }
+
   function applyPinsFromKeys(keys){
     pinned.clear();
     for(const k of keys){
       const city = activeCities.find(d => `${d.city},${d.state}` === k);
       if(city){ pinned.set(k, city); ensureCensus(city); ensureAQI(city); }
     }
+    setActivePinnedKey(focusedKey, { syncFocus: false });
     savePinned();
   }
 
@@ -1991,19 +2018,14 @@ function startApp(){
 
   function showTooltip(event, d) {
     setHoverState(d, event);
-    ensureCensus(d);
     ensureAQI(d);
 
     const wx = d._wx;
-    const pop = (d.pop != null) ? d.pop.toLocaleString('en-US') : "—";
-    const mem = memoryForCityKey(cityKey(d));
-    const memoryHTML = mem ? `<div class="divider"></div><div class="secTitle">Memory</div><div class="tooltip-memory">${escapeHTML(mem.memory_date)} - ${escapeHTML(mem.note || "")}</div>` : "";
     const movieTitle = String(d?.movie || "").trim();
     const movieYear = Number.isFinite(Number(d?.movieYear)) ? Number(d.movieYear) : null;
     const horrorHeroHTML = (isSpookyMode && movieTitle)
       ? `<div class="tooltip-horror-hero"><div class="tooltip-horror-label">Featured Horror</div><div class="tooltip-horror-movie">${escapeHTML(movieTitle)}${movieYear ? ` <span class="muted">(${movieYear})</span>` : ""}</div></div>`
       : "";
-    const sportsHTML = sportsBlockHTML(cityKey(d));
     const headerHTML = `<div class="tooltip-head"><div class="tooltip-city"><strong>${d.city}, ${d.state}</strong></div></div>`;
     const coldestDay = d?._coldest5y || wx?.coldestDay || null;
     const coldestSource = d?._coldest5y ? "5y" : "loaded";
@@ -2011,34 +2033,8 @@ function startApp(){
     const coldestLowTxt = (coldestDay?.low != null && isFinite(coldestDay.low)) ? `${Math.round(coldestDay.low)}°F` : "—";
     const coldestSourceLabel = coldestSource === "5y" ? "last 5 years" : "loaded data window";
     const coldestInfoHTML = (colorMode === "coldest")
-      ? `<div class="divider"></div><div class="secTitle">Coldest day in ${coldestSourceLabel}</div><div class="tooltip-memory">${coldestDateTxt} • Low ${coldestLowTxt}</div>`
+      ? `<div class="tooltip-context-row"><span class="tooltip-context-label">Coldest day</span><span class="tooltip-context-value">${coldestLowTxt} on ${coldestDateTxt} <span class="muted">(${coldestSourceLabel})</span></span></div>`
       : "";
-
-    const cen = d._census; const cenLoading = !!d._censusLoading; const cenErr = !!d._censusError;
-    const baTxt = (cen && cen.bachelorsPct != null && isFinite(cen.bachelorsPct)) ? fmtPct1(cen.bachelorsPct) : (cenLoading ? "…" : "—");
-    const incTxt = (cen && cen.medianIncome != null && isFinite(cen.medianIncome)) ? fmtUSDCompact(cen.medianIncome) : (cenLoading ? "…" : "—");
-    const incTitle = (cen && cen.medianIncome != null && isFinite(cen.medianIncome)) ? fmtUSD(cen.medianIncome) : "";
-    const profileNote = cenErr ? `<div class="muted" style="margin-top:4px;">City profile unavailable.</div>` : "";
-
-    const cityProfileHTML = `
-      <div class="divider"></div>
-      <div class="secTitle">City profile <span class="infoIcon" title="${CENSUS_SOURCE_TITLE}">ⓘ</span></div>
-      <div class="statGrid">
-        <div class="statTile">
-          <div class="statLabel">Population</div>
-          <div class="statValue ${pop === "—" ? "mutedVal" : ""}">${pop}</div>
-        </div>
-        <div class="statTile">
-          <div class="statLabel">Bachelor’s+ (25+)</div>
-          <div class="statValue ${baTxt === "—" || baTxt === "…" ? "mutedVal" : ""}">${baTxt}</div>
-        </div>
-        <div class="statTile">
-          <div class="statLabel">Median household income</div>
-          <div class="statValue ${incTxt === "—" || incTxt === "…" ? "mutedVal" : ""}" ${incTitle ? `title="${incTitle}"` : ""}>${incTxt}</div>
-        </div>
-      </div>
-      ${profileNote}
-    `;
 
     let aqiChip = "";
     if (d._aqi) {
@@ -2050,7 +2046,7 @@ function startApp(){
 
     if (wx === undefined) {
       tooltipEl.style.display = "block";
-      tooltipEl.innerHTML = `${headerHTML}${horrorHeroHTML}<div class="divider"></div><div class="tooltip-empty">Loading forecast…</div>${aqiChip ? `<div class="chipRow">${aqiChip}</div>` : ""}${coldestInfoHTML}${sportsHTML}${memoryHTML}${cityProfileHTML}`;
+      tooltipEl.innerHTML = `${headerHTML}${horrorHeroHTML}<div class="divider"></div><div class="tooltip-empty">Loading current conditions…</div>${aqiChip ? `<div class="chipRow">${aqiChip}</div>` : ""}<div class="tooltip-context"><div class="tooltip-context-row tooltip-context-row-inline"><span class="tooltip-context-label">More</span><span class="tooltip-context-value">Pin for more</span></div></div>`;
       tooltipEl.classList.remove("tooltip-enter");
       void tooltipEl.offsetWidth;
       tooltipEl.classList.add("tooltip-enter");
@@ -2059,7 +2055,7 @@ function startApp(){
 
     if (d._wxError || !wx) {
       tooltipEl.style.display = "block";
-      tooltipEl.innerHTML = `${headerHTML}${horrorHeroHTML}<div class="divider"></div><div class="tooltip-empty">${weatherBadgeHTML(d)} <span style="margin-left:6px;">Weather unavailable.</span></div>${aqiChip ? `<div class="chipRow">${aqiChip}</div>` : ""}${coldestInfoHTML}${sportsHTML}${memoryHTML}${cityProfileHTML}`;
+      tooltipEl.innerHTML = `${headerHTML}${horrorHeroHTML}<div class="divider"></div><div class="tooltip-empty">${weatherBadgeHTML(d)} <span style="margin-left:6px;">Weather unavailable.</span></div>${aqiChip ? `<div class="chipRow">${aqiChip}</div>` : ""}<div class="tooltip-context"><div class="tooltip-context-row tooltip-context-row-inline"><span class="tooltip-context-label">More</span><span class="tooltip-context-value">Pin for more</span></div></div>`;
       tooltipEl.classList.remove("tooltip-enter");
       void tooltipEl.offsetWidth;
       tooltipEl.classList.add("tooltip-enter");
@@ -2070,11 +2066,9 @@ function startApp(){
     const cond = wxCodeToIconLabel(snap.code);
     const temp = fmtInt(snap.temp); const feels = fmtInt(snap.feels);
     const hum = fmtInt(snap.humidity); const cloud = fmtInt(snap.cloud);
-    const ws = fmtInt(snap.windSpeed); const wg = fmtInt(snap.windGust);
-    const wdir = degToCompass(snap.windDir); const wdeg = (snap.windDir != null && isFinite(snap.windDir)) ? ` (${Math.round(snap.windDir)}°)` : "";
+    const ws = fmtInt(snap.windSpeed);
+    const wdir = degToCompass(snap.windDir);
 
-    const forecastCards = format3DayTooltipCards(d);
-    const spark = sparklineBlockForCity(d);
     const upsideBadge = isUpsideDownMode ? `<span class="chip badge upside">Upside Down Signal</span>` : "";
     const riftBadge = (isUpsideDownMode && d?._inRift)
       ? `<span class="chip badge rift">Rift Interference</span>`
@@ -2087,6 +2081,18 @@ function startApp(){
     const currentSnapshotHTML = showColdestMode
       ? `<div class="tooltip-current-note">Current: ${temp}°F ${cond.icon} ${cond.label}</div>`
       : "";
+    const wxMeta = d?._wxMeta;
+    const updateLabel = (!wxMeta || !wxMeta.source)
+      ? "No recent snapshot"
+      : (wxMeta.source === "live"
+          ? "Live now"
+          : (wxMeta.fetchedAt ? `Cached ${formatAgeShort(Date.now() - wxMeta.fetchedAt)} ago` : "Cached"));
+    const detailHint = showColdestMode ? "Hover only in Coldest Day" : "Pin for more";
+    const quickContextRows = [
+      coldestInfoHTML,
+      `<div class="tooltip-context-row tooltip-context-row-inline"><span class="tooltip-context-label">Updated</span><span class="tooltip-context-value">${updateLabel}</span></div>`,
+      `<div class="tooltip-context-row tooltip-context-row-inline"><span class="tooltip-context-label">More</span><span class="tooltip-context-value">${detailHint}</span></div>`
+    ].filter(Boolean).join("");
 
     tooltipEl.style.display = "block";
     tooltipEl.innerHTML = `
@@ -2099,21 +2105,14 @@ function startApp(){
         <div class="tooltip-status">${weatherBadgeHTML(d)} ${upsideBadge} ${riftBadge}</div>
       </div>
       ${currentSnapshotHTML}
-      ${coldestInfoHTML}
       <div class="chipRow">
         <span class="chip metric-chip"><span>💧 Hum</span><strong>${hum}%</strong></span>
-        <span class="chip metric-chip"><span>☁️ Clouds</span><strong>${cloud}%</strong></span>
-        <span class="chip metric-chip"><span>🌬️ Wind</span><strong>${ws} mph ${wdir}${wdeg}</strong></span>
-        <span class="chip metric-chip"><span>💨 Gust</span><strong>${wg} mph</strong></span>
-        ${aqiChip}
+        <span class="chip metric-chip"><span>🌬️ Wind</span><strong>${ws} mph ${wdir}</strong></span>
+        ${aqiChip || `<span class="chip metric-chip"><span>☁️ Clouds</span><strong>${cloud}%</strong></span>`}
       </div>
-      ${spark}
-      <div class="divider"></div>
-      <div class="secTitle">3‑day forecast <span class="muted" style="font-weight:700;">(high/low + precip)</span></div>
-      <div style="margin-top:6px;">${forecastCards}</div>
-      ${sportsHTML}
-      ${memoryHTML}
-      ${cityProfileHTML}
+      <div class="tooltip-context">
+        ${quickContextRows}
+      </div>
     `;
     tooltipEl.classList.remove("tooltip-enter");
     void tooltipEl.offsetWidth;
@@ -2403,78 +2402,134 @@ function startApp(){
       pinnedListEl.innerHTML = "";
       return;
     }
-    const keys = Array.from(pinned.keys());
+    const keys = getPinnedKeysInView();
     if(keys.length === 0){ pinnedPanelEl.style.display = "none"; pinnedListEl.innerHTML = ""; return; }
     pinnedPanelEl.style.display = "block";
+    const activeKey = setActivePinnedKey(getActivePinnedKey(), { syncFocus: false });
+    const activeCity = activeKey ? pinned.get(activeKey) : null;
+    if(!activeCity){
+      pinnedPanelEl.style.display = "none";
+      pinnedListEl.innerHTML = "";
+      return;
+    }
+    ensureCensus(activeCity);
+    ensureAQI(activeCity);
 
-    const rows = keys.slice().reverse().map(k => {
-      const c = pinned.get(k); const pop = (c?.pop != null) ? c.pop.toLocaleString("en-US") : "—";
-      const mem = memoryForCityKey(cityKey(c));
-      const memoryLine = mem ? `<div class="pin-memory">Memory (${escapeHTML(mem.memory_date)}): ${escapeHTML(mem.note || "")}</div>` : "";
-      const sportsHTML = (() => {
-        const games = gamesForCityKey(cityKey(c));
-        if(!isSportsFilterActive || games.length === 0) return "";
-        const byLeague = new Map();
-        for(const g of games){
-          const key = String(g.league || "Other");
-          if(!byLeague.has(key)) byLeague.set(key, []);
-          byLeague.get(key).push(g);
-        }
-        const groups = Array.from(byLeague.entries()).map(([league, list]) => {
-          const rows = list.map((g) => `<div class="pin-sports-row"><span class="pin-sports-match">${g.emoji} ${escapeHTML(g.away)} @ ${escapeHTML(g.home)}</span><span class="pin-sports-time">${escapeHTML(g.timeET)} ET</span></div>`).join("");
-          return `<div class="pin-sports-group"><div class="pin-sports-league">${escapeHTML(league)}</div>${rows}</div>`;
-        }).join("");
-        return `<div class="pin-tile pin-sports-tile"><div class="pin-tile-title">Game Day</div><div class="pin-sports-list">${groups}</div></div>`;
-      })();
-      ensureCensus(c); ensureAQI(c);
-
-      let heroMain = `—`;
-      let heroSub = `<span style="color: var(--muted);">Loading current conditions…</span>`;
-      let conditionsRows = `<div class="pin-data-row"><span class="pin-data-label">Status</span><span class="pin-data-value">Loading…</span></div>`;
-      let forecastHTML = `<div class="pinStrip"><span style="color: var(--muted);">Loading forecast…</span></div>`;
-
-      if (c?._wxError) {
-        heroSub = `${weatherBadgeHTML(c)} <span style="color: var(--muted); margin-left:6px;">Weather unavailable.</span>`;
-      } else if (c?._wx) {
-        const wx = c._wx; const snap = getSelectedWeatherSnapshot(wx); const cond = wxCodeToIconLabel(snap.code);
-        const temp = fmtInt(snap.temp); const feels = fmtInt(snap.feels); const hum = fmtInt(snap.humidity); const cloud = fmtInt(snap.cloud);
-        const ws = fmtInt(snap.windSpeed); const wg = fmtInt(snap.windGust); const wdir = degToCompass(snap.windDir);
-        heroMain = `${temp}°F`;
-        heroSub = `${cond.icon} ${cond.label} <span style="color: var(--muted);">feels ${feels}°F</span>`;
-        conditionsRows = `<div class="pin-data-row"><span class="pin-data-label">Humidity</span><span class="pin-data-value">${hum}%</span></div><div class="pin-data-row"><span class="pin-data-label">Wind</span><span class="pin-data-value">${ws} mph ${wdir}</span></div><div class="pin-data-row"><span class="pin-data-label">Gust</span><span class="pin-data-value">${wg} mph</span></div><div class="pin-data-row"><span class="pin-data-label">Clouds</span><span class="pin-data-value">${cloud}%</span></div>`;
-        forecastHTML = format3DayPills(c);
-      }
-
-      let aqiLine = `<div class="pin-data-row"><span class="pin-data-label">AQI</span><span class="pin-data-value">—</span></div>`;
-      if (c._aqi) {
-        const stat = getAQIStatus(c._aqi.aqi);
-        aqiLine = `<div class="pin-data-row"><span class="pin-data-label">AQI</span><span class="pin-data-value"><strong style="color:${stat.color}">${c._aqi.aqi}</strong> <span class="pin-value-note">(${stat.label})</span></span></div>`;
-      }
-
-      const cen = c?._census; const cenLoading = !!c?._censusLoading; const cenErr = !!c?._censusError;
-      const baTxt = (cen && cen.bachelorsPct != null && isFinite(cen.bachelorsPct)) ? fmtPct1(cen.bachelorsPct) : (cenLoading ? "…" : "—");
-      const incTxt = (cen && cen.medianIncome != null && isFinite(cen.medianIncome)) ? fmtUSDCompact(cen.medianIncome) : (cenLoading ? "…" : "—");
-      const incTitle = (cen && cen.medianIncome != null && isFinite(cen.medianIncome)) ? fmtUSD(cen.medianIncome) : "";
-      const profileNote = cenErr ? `<div class="pinMeta" style="margin-top:4px;">City profile unavailable.</div>` : "";
-      const wxMeta = c?._wxMeta || {};
-      const statusChips = [];
-      if(isUpsideDownMode) statusChips.push(`<span class="pin-chip pin-chip-upside">Upside Down Signal</span>`);
-      if(isUpsideDownMode && c?._inRift) statusChips.push(`<span class="pin-chip pin-chip-rift">Rift Zone</span>`);
-      if(isHistoricalMode) statusChips.push(`<span class="pin-chip">Time Machine</span>`);
-      if(wxMeta.source === "live") statusChips.push(`<span class="pin-chip pin-chip-live">Live</span>`);
-      if(wxMeta.source === "cache") statusChips.push(`<span class="pin-chip pin-chip-cache">Cached</span>`);
-      if(c?._aqi?.aqi != null && isFinite(c._aqi.aqi) && !isHistoricalMode){
-        const stat = getAQIStatus(c._aqi.aqi);
-        statusChips.push(`<span class="pin-chip" style="border-color:${stat.color}; color:${stat.color};">AQI ${c._aqi.aqi}</span>`);
-      }
-      const chipRow = statusChips.length ? `<div class="pin-chip-row">${statusChips.join("")}</div>` : "";
-
-      const profileHTML = `<div class="pin-data-row"><span class="pin-data-label">Population</span><span class="pin-data-value">${pop}</span></div><div class="pin-data-row"><span class="pin-data-label">Bachelor's+ (25+)</span><span class="pin-data-value">${baTxt}</span></div><div class="pin-data-row"><span class="pin-data-label">Median income</span><span class="pin-data-value" ${incTitle ? `title="${incTitle}"` : ""}>${incTxt}</span></div><div class="pin-tile-foot">Source: US Census <span class="infoIcon" title="${CENSUS_SOURCE_TITLE}">ⓘ</span></div>${profileNote}`;
-
-      return `<div class="pinRow"><button class="pinRemove" data-key="${k}" title="Remove">✕</button><div class="pinMain"><div class="pin-head"><div class="pinCity"><strong>${c.city}, ${c.state}</strong></div>${chipRow}</div><div class="pinHero"><div class="pinHeroMain">${heroMain}</div><div class="pinHeroSub">${heroSub}</div></div>${memoryLine}<div class="pin-bento-grid"><div class="pin-tile"><div class="pin-tile-title">Conditions</div>${aqiLine}${conditionsRows}</div><div class="pin-tile"><div class="pin-tile-title">City Profile</div>${profileHTML}</div></div><div class="pinForecastBlock"><div class="pinForecastTitle">3-day forecast</div>${forecastHTML}</div>${sportsHTML}</div></div>`;
+    const railHTML = keys.map((k) => {
+      const city = pinned.get(k);
+      const wx = city?._wx;
+      const snap = wx ? getSelectedWeatherSnapshot(wx) : null;
+      const tempTxt = (snap?.temp != null && isFinite(snap.temp)) ? `${fmtInt(snap.temp)}°` : "—";
+      const activeClass = k === activeKey ? " is-active" : "";
+      return `<div class="pinRailItem${activeClass}"><button class="pinRailSelect" type="button" data-key="${k}" aria-pressed="${k === activeKey ? "true" : "false"}"><span class="pinRailCity">${escapeHTML(city.city)}</span><span class="pinRailTemp">${tempTxt}</span></button><button class="pinRailRemove" type="button" data-key="${k}" aria-label="Remove ${escapeHTML(city.city)}, ${escapeHTML(city.state)} from pinned cities">✕</button></div>`;
     }).join("");
 
-    pinnedListEl.innerHTML = rows;
+    const wx = activeCity?._wx;
+    const wxMeta = activeCity?._wxMeta || {};
+    const pop = (activeCity?.pop != null) ? activeCity.pop.toLocaleString("en-US") : "—";
+    const games = gamesForCityKey(cityKey(activeCity));
+    const hasSports = isSportsFilterActive && games.length > 0;
+    const tabs = availablePinnedTabsForCity(activeCity);
+    if(!tabs.some((tab) => tab.id === pinnedPanelTab)) pinnedPanelTab = "overview";
+    const tabButtons = tabs.map((tab) => `<button type="button" class="pinSegmentBtn${tab.id === pinnedPanelTab ? " is-active" : ""}" data-tab="${tab.id}" aria-pressed="${tab.id === pinnedPanelTab ? "true" : "false"}">${tab.label}</button>`).join("");
+
+    let heroMain = "—";
+    let heroSub = `<span class="pinInspectorMuted">Loading current conditions…</span>`;
+    let metricCards = `<div class="pinMetricCard"><span class="pinMetricLabel">Status</span><strong class="pinMetricValue">Loading…</strong></div>`;
+    let overviewMeta = "Loading weather";
+    let forecastHTML = `<div class="pinInspectorEmpty">Loading forecast…</div>`;
+    let summaryNote = "";
+
+    if (activeCity?._wxError) {
+      overviewMeta = "Weather unavailable";
+      heroSub = `${weatherBadgeHTML(activeCity)} <span class="pinInspectorMuted">Weather unavailable.</span>`;
+    } else if (wx) {
+      const snap = getSelectedWeatherSnapshot(wx);
+      const cond = wxCodeToIconLabel(snap.code);
+      const temp = fmtInt(snap.temp);
+      const feels = fmtInt(snap.feels);
+      const hum = fmtInt(snap.humidity);
+      const cloud = fmtInt(snap.cloud);
+      const ws = fmtInt(snap.windSpeed);
+      const wdir = degToCompass(snap.windDir);
+      heroMain = `${temp}°F`;
+      heroSub = `${cond.icon} ${cond.label} <span class="pinInspectorMuted">Feels ${feels}°F</span>`;
+      const aqiValue = (activeCity?._aqi?.aqi != null && isFinite(activeCity._aqi.aqi))
+        ? (() => {
+            const stat = getAQIStatus(activeCity._aqi.aqi);
+            return `<div class="pinMetricCard"><span class="pinMetricLabel">AQI</span><strong class="pinMetricValue" style="color:${stat.color}">${activeCity._aqi.aqi}</strong></div>`;
+          })()
+        : `<div class="pinMetricCard"><span class="pinMetricLabel">Clouds</span><strong class="pinMetricValue">${cloud}%</strong></div>`;
+      metricCards = `<div class="pinMetricCard"><span class="pinMetricLabel">Humidity</span><strong class="pinMetricValue">${hum}%</strong></div><div class="pinMetricCard"><span class="pinMetricLabel">Wind</span><strong class="pinMetricValue">${ws} mph ${wdir}</strong></div>${aqiValue}`;
+      overviewMeta = (wxMeta.source === "live")
+        ? "Live now"
+        : (wxMeta.source === "cache" ? (wxMeta.fetchedAt ? `Cached ${formatAgeShort(Date.now() - wxMeta.fetchedAt)} ago` : "Cached") : "No recent snapshot");
+      forecastHTML = format3DayPills(activeCity);
+    }
+
+    const statusTags = [];
+    if(isHistoricalMode) statusTags.push(`<span class="pinInspectorTag">Time Machine</span>`);
+    if(colorMode === "coldest"){
+      const coldestDay = activeCity?._coldest5y || activeCity?._wx?.coldestDay || null;
+      const lowTxt = (coldestDay?.low != null && isFinite(coldestDay.low)) ? `${Math.round(coldestDay.low)}°F` : "—";
+      const dateTxt = formatDateLong(coldestDay?.date);
+      summaryNote = `<div class="pinInspectorNote"><span class="pinInspectorNoteLabel">Coldest day</span><span class="pinInspectorNoteValue">${lowTxt} on ${dateTxt}</span></div>`;
+    }
+    if(isUpsideDownMode) statusTags.push(`<span class="pinInspectorTag pinInspectorTag-upside">Upside Down</span>`);
+    if(isUpsideDownMode && activeCity?._inRift) statusTags.push(`<span class="pinInspectorTag pinInspectorTag-rift">Rift Zone</span>`);
+    if(wxMeta.source === "live") statusTags.push(`<span class="pinInspectorTag pinInspectorTag-live">Live</span>`);
+    if(wxMeta.source === "cache") statusTags.push(`<span class="pinInspectorTag pinInspectorTag-cache">Cached</span>`);
+    const statusTagsHTML = statusTags.length ? `<div class="pinInspectorTagRow">${statusTags.join("")}</div>` : "";
+
+    const cen = activeCity?._census;
+    const cenLoading = !!activeCity?._censusLoading;
+    const cenErr = !!activeCity?._censusError;
+    const baTxt = (cen && cen.bachelorsPct != null && isFinite(cen.bachelorsPct)) ? fmtPct1(cen.bachelorsPct) : (cenLoading ? "…" : "—");
+    const incTxt = (cen && cen.medianIncome != null && isFinite(cen.medianIncome)) ? fmtUSDCompact(cen.medianIncome) : (cenLoading ? "…" : "—");
+    const incTitle = (cen && cen.medianIncome != null && isFinite(cen.medianIncome)) ? fmtUSD(cen.medianIncome) : "";
+    const profileHTML = `<div class="pinInfoList"><div class="pinInfoRow"><span class="pinInfoLabel">Population</span><span class="pinInfoValue">${pop}</span></div><div class="pinInfoRow"><span class="pinInfoLabel">Bachelor's+ (25+)</span><span class="pinInfoValue">${baTxt}</span></div><div class="pinInfoRow"><span class="pinInfoLabel">Median income</span><span class="pinInfoValue" ${incTitle ? `title="${incTitle}"` : ""}>${incTxt}</span></div></div><div class="pinTabFoot">Source: US Census <span class="infoIcon" title="${CENSUS_SOURCE_TITLE}">ⓘ</span></div>${cenErr ? `<div class="pinTabFoot">City profile unavailable.</div>` : ""}`;
+    const extrasBlocks = [];
+    if(hasSports){
+      const byLeague = new Map();
+      for(const g of games){
+        const leagueKey = String(g.league || "Other");
+        if(!byLeague.has(leagueKey)) byLeague.set(leagueKey, []);
+        byLeague.get(leagueKey).push(g);
+      }
+      const sportsRows = Array.from(byLeague.entries()).map(([league, list]) => {
+        const rows = list.map((g) => `<div class="pinSportsRow"><span class="pinSportsMatch">${g.emoji} ${escapeHTML(g.away)} @ ${escapeHTML(g.home)}</span><span class="pinSportsTime">${escapeHTML(g.timeET)} ET</span></div>`).join("");
+        return `<div class="pinSportsGroup"><div class="pinSportsLeague">${escapeHTML(league)}</div>${rows}</div>`;
+      }).join("");
+      extrasBlocks.push(`<div class="pinTabSection"><div class="pinTabSectionTitle">Game Day</div><div class="pinSportsList">${sportsRows}</div></div>`);
+    }
+    const extrasHTML = extrasBlocks.length ? extrasBlocks.join("") : `<div class="pinInspectorEmpty">No extra city details right now.</div>`;
+
+    let tabBody = "";
+    if(pinnedPanelTab === "forecast"){
+      tabBody = forecastHTML;
+    } else if(pinnedPanelTab === "profile"){
+      tabBody = profileHTML;
+    } else if(pinnedPanelTab === "extras"){
+      tabBody = extrasHTML;
+    } else {
+      tabBody = `<div class="pinInspectorOverview">${statusTagsHTML}<div class="pinInspectorHero"><div class="pinInspectorHeroMain">${heroMain}</div><div class="pinInspectorHeroSub">${heroSub}</div></div><div class="pinInspectorMeta">${overviewMeta}</div><div class="pinInspectorMetrics">${metricCards}</div>${summaryNote}</div>`;
+    }
+
+    pinnedListEl.innerHTML = `
+      <div class="pinInspectorShell">
+        <div class="pinRail" aria-label="Pinned cities">${railHTML}</div>
+        <div class="pinInspectorBody">
+          <div class="pinInspectorHeader">
+            <div>
+              <div class="pinInspectorCity">${escapeHTML(activeCity.city)}, ${escapeHTML(activeCity.state)}</div>
+            </div>
+            <button class="pinInspectorRemove" type="button" data-key="${activeKey}" aria-label="Remove ${escapeHTML(activeCity.city)}, ${escapeHTML(activeCity.state)} from pinned cities">×</button>
+          </div>
+          <div class="pinSegmented" aria-label="Pinned city details">${tabButtons}</div>
+          <div class="pinTabBody">${tabBody}</div>
+        </div>
+      </div>
+    `;
   }
 
   function updatePinnedStyles(){
@@ -2959,11 +3014,10 @@ function startApp(){
     const k = cityKey(d);
     if(pinned.has(k)){
       pinned.delete(k);
-      if(focusedKey === k) focusedKey = null;
+      if(focusedKey === k) setActivePinnedKey(null, { syncFocus: false });
     } else {
-      pinned.delete(k);
       pinned.set(k, d);
-      focusedKey = k;
+      setActivePinnedKey(k, { syncFocus: false });
       ensureCensus(d);
       ensureAQI(d);
     }
@@ -3487,18 +3541,7 @@ function startApp(){
           .attr("dy", -7)
           .text("★")
           .style("display", "none")
-          .on("click", async (event, d) => {
-            event.stopPropagation();
-            const key = cityKey(d);
-            const list = memoriesForCityKey(key);
-            if(list.length === 0) return;
-            if(list.length === 1){
-              await jumpToMemoryDate(list[0]);
-              showTooltip(event, d);
-              return;
-            }
-            openMemoryJournal(key);
-          });
+          .style("pointer-events", "none");
         appendWeatherIconGlyph(g, "city-weather-icon");
 
         const promotedBadge = g.append("g").attr("class", "marker-promoted").style("display", "none");
@@ -3772,9 +3815,28 @@ function startApp(){
 
   if(pinnedListEl){
     pinnedListEl.addEventListener("click", (e) => {
-      const btn = e.target.closest("button.pinRemove"); if(!btn) return;
-      const k = btn.getAttribute("data-key"); if(!k) return;
-      pinned.delete(k); savePinned(); renderPinnedPanel(); updatePinnedStyles(); schedulePermalinkUpdate();
+      const removeBtn = e.target.closest("button.pinRailRemove, button.pinInspectorRemove");
+      if(removeBtn){
+        const k = removeBtn.getAttribute("data-key"); if(!k) return;
+        pinned.delete(k);
+        if(focusedKey === k) setActivePinnedKey(null, { syncFocus: false });
+        savePinned(); renderPinnedPanel(); updatePinnedStyles(); applyFocusStyles(); schedulePermalinkUpdate();
+        return;
+      }
+      const selectBtn = e.target.closest("button.pinRailSelect");
+      if(selectBtn){
+        const k = selectBtn.getAttribute("data-key"); if(!k || !pinned.has(k)) return;
+        setActivePinnedKey(k, { syncFocus: false });
+        renderPinnedPanel(); applyFocusStyles(); schedulePermalinkUpdate();
+        return;
+      }
+      const tabBtn = e.target.closest("button.pinSegmentBtn");
+      if(tabBtn){
+        const tab = tabBtn.getAttribute("data-tab");
+        if(!tab || pinnedPanelTab === tab) return;
+        pinnedPanelTab = tab;
+        renderPinnedPanel();
+      }
     });
   }
 

@@ -3,16 +3,16 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>US City Weather Map (Time-Lapse, Emojis, AQI)</title>
+  <title>US Weather Map</title>
     <link rel="stylesheet" href="styles/main.css" />
 </head>
 <body>
   <header>
     <div class="headerLeft title">
       <div class="titleRow">
-        <h1>US Weather Map - Top 50 Cities (Time-Lapse & Emojis)</h1>
+        <h1>US Weather Map</h1>
       </div>
-      <div class="sub">Weather + AQI + census insights for top US cities.</div>
+      <div class="sub">Live weather across major U.S. cities.</div>
     </div>
 
     <div class="headerCenter">
@@ -32,14 +32,13 @@
     </div>
 
     <div class="headerRight actions">
-      <div class="actionGroup actionGroupMain">
+      <div class="actionGroup actionGroupMain" aria-label="Map actions">
+        <button id="addCityBtn" class="btnAction btnSecondary" title="Add a city to the map">Add City</button>
         <button id="refreshBtn" class="btnAction btnSecondary" title="Re-fetch weather data">Refresh</button>
-        <button id="addCityBtn" class="btnAction btnPrimary" title="Add a city to the map">+ Add City</button>
-        <button id="logMemoryBtn" class="btnAction btnSecondary" title="Log a memory for a city">Log Memory</button>
       </div>
 
       <details class="actionMenu">
-        <summary>Customize</summary>
+        <summary>View Options</summary>
         <div class="actionPanel">
           <div class="menuSection">
             <div class="menuSectionTitle">Map Layers</div>
