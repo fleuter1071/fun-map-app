@@ -1,10 +1,10 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>US Weather Map</title>
-    <link rel="stylesheet" href="styles/main.css" />
+  <link rel="stylesheet" href="styles/main.css" />
 </head>
 <body>
   <header>
@@ -33,25 +33,36 @@
 
     <div class="headerRight actions">
       <div class="actionGroup actionGroupMain" aria-label="Map actions">
-        <button id="addCityBtn" class="btnAction btnSecondary" title="Add a city to the map">Add City</button>
         <button id="refreshBtn" class="btnAction btnSecondary" title="Re-fetch weather data">Refresh</button>
       </div>
 
       <details class="actionMenu">
         <summary>View Options</summary>
         <div class="actionPanel">
+          <div class="viewOptionsState">
+            <div class="viewOptionsStateLabel">Current State</div>
+            <div class="viewOptionsStateChips" id="viewOptionsStateChips">
+              <span class="viewStateChip" id="viewStateMetric">Temperature</span>
+              <span class="viewStateChip" id="viewStateTime">Live</span>
+              <span class="viewStateChip" id="viewStateTheme">Default</span>
+            </div>
+          </div>
+
           <div class="menuSection">
-            <div class="menuSectionTitle">Map Layers</div>
-            <div class="modeControl" title="Choose what the map colors represent (dots + surface)">
-              <span class="pill">Color</span>
-              <select id="colorModeSelect" aria-label="Color mode">
-                <option value="temp" selected>Temp (Hourly)</option>
-                <option value="precip">Precip (%) (Hourly)</option>
-                <option value="aqi">Air Quality (AQI)</option>
-                <option value="coldest">Coldest Day (Best Available)</option>
+            <div class="menuSectionTitle">View</div>
+            <div class="modeControl viewModeControl" title="Choose what the map colors represent">
+              <div class="menuFieldLabel">Map Color</div>
+              <select id="colorModeSelect" aria-label="Map color mode">
+                <option value="temp" selected>Temperature</option>
+                <option value="precip">Precipitation</option>
+                <option value="aqi">Air Quality</option>
+                <option value="coldest">Coldest Day</option>
               </select>
             </div>
-            <div class="modeHelp">Best available: computed from currently loaded weather data window.</div>
+            <div class="modeHelp">Uses the current loaded weather window.</div>
+            <div class="modeRuleNotice" id="coldestModeNotice" hidden>
+              Coldest Day shows best-available historical lows. Pinning is off in this mode.
+            </div>
             <label class="toggle" title="Show a soft surface between cities">
               <input type="checkbox" id="surfaceToggle" checked />
               <span>Surface</span>
@@ -63,7 +74,7 @@
           </div>
 
           <div class="menuSection">
-            <div class="menuSectionTitle">Modes & Themes</div>
+            <div class="menuSectionTitle">Time</div>
             <div class="tmControl" title="Switch between live forecast and archived weather">
               <label class="toggle tmToggle">
                 <input type="checkbox" id="timeMachineToggle" />
@@ -74,6 +85,10 @@
               </div>
             </div>
             <div class="modeHelp tmNotice" id="timeMachineNotice" hidden></div>
+          </div>
+
+          <div class="menuSection">
+            <div class="menuSectionTitle">Themes</div>
             <label class="toggle tmToggle" title="Enable The Upside Down protocol">
               <input type="checkbox" id="upsideDownToggle" />
               <span>The Upside Down</span>
@@ -114,7 +129,10 @@
                 <span class="themeAudioIcon" id="spookyAudioIcon" aria-hidden="true">🔇</span>
               </button>
             </div>
-            <button id="addCityMenuBtn" type="button" class="menuButton">+ Add City</button>
+          </div>
+
+          <div class="menuFooter">
+            <button id="addCityMenuBtn" type="button" class="menuButton">Add City</button>
           </div>
         </div>
       </details>
@@ -210,10 +228,7 @@
     </div>
   </div>
 
-    <script src="src/config/horror-cities.js"></script>
-    <script src="src/main.js"></script>
+  <script src="src/config/horror-cities.js"></script>
+  <script src="src/main.js"></script>
 </body>
 </html>
-
-
-

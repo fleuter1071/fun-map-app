@@ -387,8 +387,11 @@ function startApp(){
   const upsideDownAudioHint = document.getElementById("upsideDownAudioHint");
   const upsideDownAudioToggle = document.getElementById("upsideDownAudioToggle");
   const upsideDownAudioIcon = document.getElementById("upsideDownAudioIcon");
-  const addCityBtn = document.getElementById("addCityBtn");
   const addCityMenuBtn = document.getElementById("addCityMenuBtn");
+  const viewStateMetric = document.getElementById("viewStateMetric");
+  const viewStateTime = document.getElementById("viewStateTime");
+  const viewStateTheme = document.getElementById("viewStateTheme");
+  const coldestModeNotice = document.getElementById("coldestModeNotice");
   const logMemoryBtn = document.getElementById("logMemoryBtn");
   const memoryFormWrap = document.getElementById("memoryFormWrap");
   const memoryForm = document.getElementById("memoryForm");
@@ -1319,6 +1322,7 @@ function startApp(){
     } else if(timeMachineToggle){
       timeMachineToggle.disabled = false;
     }
+    updateModeUXHints();
   }
 
   function applyThemeAttribute(){
@@ -1361,10 +1365,12 @@ function startApp(){
       clearAQIData();
       selectedHourIndex = 0;
       if(daySlider) daySlider.value = "0";
+      updateModeUXHints();
       await loadAllWeather({ force: true });
     } else {
       selectedHourIndex = 0;
       if(daySlider) daySlider.value = "0";
+      updateModeUXHints();
       await loadAllWeather({ force: true });
       if(colorMode === "aqi") loadAllAQI();
     }
@@ -1399,6 +1405,7 @@ function startApp(){
     selectedHourIndex = 0;
     if(daySlider) daySlider.value = "0";
     if(cachedUSMap) render(cachedUSMap);
+    updateModeUXHints();
     schedulePermalinkUpdate();
     await loadAllWeather({ force: true });
     if(colorMode === "aqi" && !isHistoricalMode){
@@ -1442,6 +1449,7 @@ function startApp(){
     clearAQIData();
     selectedHourIndex = 0;
     if(daySlider) daySlider.value = "0";
+    updateModeUXHints();
     schedulePermalinkUpdate();
     await loadAllWeather({ force: true });
     if(colorMode === "aqi" && !isHistoricalMode){
@@ -2263,6 +2271,7 @@ function startApp(){
       if(dayLabelEl) dayLabelEl.textContent = fallback;
       updateLegendContext(fallback);
     }
+    if(viewStateTime) viewStateTime.textContent = getViewStateTimeLabel();
   }
 
   const PINNED_KEY = "uswx:pins:top25";
@@ -2280,6 +2289,26 @@ function startApp(){
     if(event && event.sourceEvent && typeof event.sourceEvent.pointerType === "string") return event.sourceEvent.pointerType === "touch";
     try { return window.matchMedia && window.matchMedia("(pointer: coarse)").matches; } catch { return false; }
   }
+  function getViewStateMetricLabel(){
+    switch(colorMode){
+      case "precip": return "Precipitation";
+      case "aqi": return "Air Quality";
+      case "coldest": return "Coldest Day";
+      case "temp":
+      default:
+        return "Temperature";
+    }
+  }
+  function getViewStateTimeLabel(){
+    if(isHistoricalMode) return "Time Machine";
+    if(selectedHourIndex > 0) return `Looking Ahead +${selectedHourIndex}h`;
+    return "Live";
+  }
+  function getViewStateThemeLabel(){
+    if(isUpsideDownMode) return "Upside Down";
+    if(isSpookyMode) return "Spooky";
+    return "Default";
+  }
   function updateModeUXHints(){
     const coldest = colorMode === "coldest";
     if(modeInfoChip) modeInfoChip.hidden = !coldest;
@@ -2289,6 +2318,17 @@ function startApp(){
         const base = "Map color uses each city's coldest low from last 5 years.";
         const suffix = coldestMeta.computing ? " Updating in background…" : (coldestMeta.stale ? " Cached values may be stale." : "");
         modeSubnote.textContent = `${base}${suffix}`;
+      }
+    }
+    if(viewStateMetric) viewStateMetric.textContent = getViewStateMetricLabel();
+    if(viewStateTime) viewStateTime.textContent = getViewStateTimeLabel();
+    if(viewStateTheme) viewStateTheme.textContent = getViewStateThemeLabel();
+    if(coldestModeNotice){
+      coldestModeNotice.hidden = !coldest;
+      coldestModeNotice.classList.toggle("is-warning", coldest);
+      if(coldest){
+        const suffix = coldestMeta.computing ? " Updating in background." : (coldestMeta.stale ? " Cached values may be stale." : "");
+        coldestModeNotice.textContent = `Coldest Day shows best-available historical lows. Pinning is off in this mode.${suffix}`;
       }
     }
     if(pinnedHintEl){
@@ -3706,7 +3746,6 @@ function startApp(){
   resetBtn.addEventListener("click", resetView);
   if(locateBtn) locateBtn.addEventListener("click", locateUser);
   if(copyLinkBtn) copyLinkBtn.addEventListener("click", copyPermalinkToClipboard);
-  if(addCityBtn) addCityBtn.addEventListener("click", () => setAddCityModalVisible(true));
   if(addCityMenuBtn) addCityMenuBtn.addEventListener("click", () => {
     closeActionMenus();
     setAddCityModalVisible(true);
